@@ -155,7 +155,10 @@
       (setq header-line-format
             (format " %s%s>>%s   u=back to method list"
                     class (if class-side-p " class" "") selector))
-      (local-set-key (kbd "u") #'pharo-smalltalk-browser-back))))
+      (let ((map (make-sparse-keymap)))
+        (set-keymap-parent map (current-local-map))
+        (define-key map (kbd "u") #'pharo-smalltalk-browser-back)
+        (use-local-map map)))))
 
 ;; ------------- Row activation -------------
 

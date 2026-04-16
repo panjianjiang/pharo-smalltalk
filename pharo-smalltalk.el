@@ -533,10 +533,12 @@ response alist on success and ERROR is a string on failure."
     (pharo-smalltalk--request-json-async type url data callback)))
 
 (defun pharo-smalltalk--extract-transcript (response)
-  "Store RESPONSE's transcript text (if non-empty) into the last-transcript var."
-  (let ((tr (alist-get 'transcript response)))
-    (setq pharo-smalltalk-last-transcript
-          (and (stringp tr) (> (length tr) 0) tr))))
+  "Store RESPONSE's transcript text (if non-empty) into the last-transcript var.
+Line endings are normalized from Pharo's CR to LF for Emacs display."
+  (let* ((raw (alist-get 'transcript response))
+         (tr (and (stringp raw) (> (length raw) 0)
+                  (pharo-smalltalk--normalize-newlines raw))))
+    (setq pharo-smalltalk-last-transcript tr)))
 
 (defun pharo-smalltalk--unwrap-async (callback)
   "Return a callback that unwraps the Pharo result envelope before calling CALLBACK."
