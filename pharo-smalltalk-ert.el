@@ -314,6 +314,14 @@
            "3 ran, 2 passed, 0 skipped, 0 expected failure, 0 failures, 1 error")
           '(3 2 0 0 0 1))))
 
+(ert-deftest pharo-smalltalk-test-rerun-supports-integration ()
+  (let ((pharo-smalltalk-test--rerun-args '(integration nil))
+        called)
+    (cl-letf (((symbol-function 'pharo-smalltalk-test-run-integration)
+               (lambda () (setq called t))))
+      (pharo-smalltalk-test-rerun)
+      (should called))))
+
 (ert-deftest pharo-smalltalk-success-p-handles-json-false ()
   (should (pharo-smalltalk--success-p '((success . t))))
   (should-not (pharo-smalltalk--success-p '((success . :json-false))))

@@ -4,8 +4,9 @@
 
 ;; Runs Pharo TestCase classes and packages through the bridge and
 ;; renders the parsed summary in a `*Pharo Tests*' buffer.  Also
-;; offers `pharo-smalltalk-test-run-smoke' for a fixed live integration
-;; check against the running interop server.
+;; offers `pharo-smalltalk-test-run-smoke' and
+;; `pharo-smalltalk-test-run-integration' for fixed live checks against
+;; the running interop server.
 
 ;;; Code:
 
@@ -57,6 +58,7 @@ its singular or plural form (e.g., `1 failure' vs `2 failures')."
     (define-key map (kbd "c") #'pharo-smalltalk-test-run-class)
     (define-key map (kbd "p") #'pharo-smalltalk-test-run-package)
     (define-key map (kbd "s") #'pharo-smalltalk-test-run-smoke)
+    (define-key map (kbd "i") #'pharo-smalltalk-test-run-integration)
     map)
   "Keymap for `pharo-smalltalk-test-mode'.")
 
@@ -123,6 +125,74 @@ its singular or plural form (e.g., `1 failure' vs `2 failures')."
                         (if (funcall fn) 'pass 'fail)
                       (error (error-message-string err))))
               results)))
+    (nreverse results)))
+
+(defun pharo-smalltalk-test--integration-checks ()
+  "Run a higher-level live integration suite against the current bridge."
+  (let ((class-name "CodexTmpIntegration")
+        results)
+    (unwind-protect
+        (progn
+          (push (list "class-compile"
+                      (condition-case err
+                          (if (equal (pharo-smalltalk-compile-class-definition
+                                      "Class {\n\t#name : 'CodexTmpIntegration',\n\t#superclass : 'Object',\n\t#instVars : [ 'value' ],\n\t#category : 'Codex-Integration'\n}")
+                                     class-name)
+                              'pass
+                            'fail)
+                        (error (error-message-string err))))
+                results)
+          (push (list "instance-method"
+                      (condition-case err
+                          (if (equal (pharo-smalltalk-compile-method
+                                      class-name "instance" "accessing"
+                                      "value\n\t^ value ifNil: [ 0 ]")
+                                     "value")
+                              'pass
+                            'fail)
+                        (error (error-message-string err))))
+                results)
+          (push (list "class-method"
+                      (condition-case err
+                          (if (equal (pharo-smalltalk-compile-method
+                                      class-name "class" "instance creation"
+                                      "answer\n\t^ 42")
+                                     "answer")
+                              'pass
+                            'fail)
+                        (error (error-message-string err))))
+                results)
+          (push (list "instance-call"
+                      (condition-case err
+                          (if (equal (pharo-smalltalk-eval
+                                      "CodexTmpIntegration new value")
+                                     0)
+                              'pass
+                            'fail)
+                        (error (error-message-string err))))
+                results)
+          (push (list "class-call"
+                      (condition-case err
+                          (if (equal (pharo-smalltalk-eval
+                                      "CodexTmpIntegration answer")
+                                     42)
+                              'pass
+                            'fail)
+                        (error (error-message-string err))))
+                results)
+          (push (list "source-roundtrip"
+                      (condition-case err
+                          (if (string-match-p
+                               "\\`answer"
+                               (pharo-smalltalk-get-method-source
+                                class-name "answer" t))
+                              'pass
+                            'fail)
+                        (error (error-message-string err))))
+                results))
+      (ignore-errors
+        (pharo-smalltalk-eval
+         "Smalltalk globals removeKey: #CodexTmpIntegration ifAbsent: [ ]. 'ok'")))
     (nreverse results)))
 
 (defun pharo-smalltalk-test--render-smoke (results)
@@ -194,6 +264,7 @@ its singular or plural form (e.g., `1 failure' vs `2 failures')."
     (`(class ,name) (pharo-smalltalk-test-run-class name))
     (`(package ,name) (pharo-smalltalk-test-run-package name))
     (`(smoke nil) (pharo-smalltalk-test-run-smoke))
+    (`(integration nil) (pharo-smalltalk-test-run-integration))
     (_ (user-error "No previous Pharo test run to rerun"))))
 
 ;;;###autoload
@@ -203,6 +274,16 @@ its singular or plural form (e.g., `1 failure' vs `2 failures')."
   (message "Running Pharo smoke tests...")
   (pharo-smalltalk-test--render-smoke
    (pharo-smalltalk-test--smoke-checks)))
+
+;;;###autoload
+(defun pharo-smalltalk-test-run-integration ()
+  "Run a higher-level live integration suite against the current bridge."
+  (interactive)
+  (message "Running Pharo integration tests...")
+  (let ((results (pharo-smalltalk-test--integration-checks)))
+    (with-current-buffer (get-buffer-create pharo-smalltalk-test-buffer-name)
+      (setq pharo-smalltalk-test--rerun-args '(integration nil)))
+    (pharo-smalltalk-test--render-smoke results)))
 
 (provide 'pharo-smalltalk-test)
 ;;; pharo-smalltalk-test.el ends here

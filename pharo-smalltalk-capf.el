@@ -287,7 +287,9 @@ symbol deliver nil to release eldoc without showing stale text."
        ;; Class: show first non-empty line of its comment.
        ((and (> (length sym) 0) (<= ?A (aref sym 0) ?Z))
         (let ((cached (pharo-smalltalk--source-cache-lookup
-                       pharo-smalltalk--class-comment-cache sym)))
+                       pharo-smalltalk--class-comment-cache
+                       sym
+                       pharo-smalltalk-browser-cache-ttl)))
           (if cached
               (pharo-smalltalk-capf--eldoc-deliver
                callback
@@ -310,7 +312,9 @@ symbol deliver nil to release eldoc without showing stale text."
                           :class-side-p nil)))
                (key (pharo-smalltalk-method-spec-key spec))
                (cached (pharo-smalltalk--source-cache-lookup
-                        pharo-smalltalk--method-source-cache key)))
+                        pharo-smalltalk--method-source-cache
+                        key
+                        pharo-smalltalk-browser-cache-ttl)))
           (if cached
               (pharo-smalltalk-capf--eldoc-deliver
                callback
