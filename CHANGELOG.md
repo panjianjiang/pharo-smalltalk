@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+- **Glyph Protocol v0.1 alignment (dual-write)**: every Sis-Bridge-Extras
+  and Sis-Inspector endpoint now emits both the legacy
+  `{success, result, error{description, stack_trace}}` envelope and
+  the Glyph `{ok, result, error{code, message, stack}, meta}` envelope
+  in the same response.  Scope: `/eval`, `/compile-method`,
+  `/compile-class`, `/remove-method`, `/remove-class`,
+  `/inspect/expression`, `/inspect/ref`, `/transcript/poll`,
+  `/transcript/clear`.  Upstream SisServer routes (list/search/get/
+  export/run) stay on the legacy envelope for now.
+- Error objects carry a stable `code` in `{bad_request, compile_error,
+  eval_error, object_not_found, internal_error}` (more as we find
+  them) plus `message` (shorter than `description`) and `stack` (alias
+  of `stack_trace`).
+- `compile-method` and `compile-class` results now include Glyph's
+  `kind: "compile_result"`, `target_kind: "method"|"class"`, and a
+  `status` triplet: `created` / `updated` / `unchanged` (methods get
+  the full triplet; classes are binary created/updated).  Methods
+  also emit `side: "instance"|"class"` alongside `is_class_method`,
+  and the request accepts either.
+- `/transcript/poll` result gains `kind: "transcript_chunk"` and a
+  `cursor: "tr:<seq>"` string; `/transcript/clear` returns a
+  `{kind: "ack", message, seq}` dictionary.
+- `meta.duration_ms` attached to every response on the nine Glyph
+  endpoints (success and error paths both).
+- Emacs `pharo-smalltalk--success-p` prefers `ok` when present and
+  falls back to `success`, so old and new responses both decode
+  correctly.  Pharo tests +6, ERT +1.
+
 - **Inspector endpoints**: new `POST /inspect/expression` (body
   `{expression}`) and `GET /inspect/ref?ref=<n>` on the server, shipped
   as Sis-Inspector extension methods on `SisServer`.  Register only

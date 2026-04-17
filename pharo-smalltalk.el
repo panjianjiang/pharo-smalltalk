@@ -641,10 +641,14 @@ The wrapped CALLBACK is invoked as (RESULT ERROR)."
 
 (defun pharo-smalltalk--success-p (response)
   "Return non-nil iff RESPONSE indicates a successful Pharo call.
-JSON `false' is parsed as `:json-false' by `json-read', which would
-otherwise pass a naive truthiness check."
-  (let ((s (alist-get 'success response)))
-    (and s (not (eq s :json-false)) (not (eq s :false)))))
+Checks Glyph's `ok' flag first, then falls back to the legacy
+`success' key.  JSON `false' parses as `:json-false' under
+`json-read', so a naive truthiness test would pass; filter those
+sentinel values explicitly."
+  (let* ((raw (if (assq 'ok response)
+                  (alist-get 'ok response)
+                (alist-get 'success response))))
+    (and raw (not (eq raw :json-false)) (not (eq raw :false)))))
 
 (defun pharo-smalltalk--result (response)
   "Return RESPONSE result or raise a user-facing error.

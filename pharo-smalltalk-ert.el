@@ -332,6 +332,18 @@
   (should-not (pharo-smalltalk--success-p '((success . nil))))
   (should-not (pharo-smalltalk--success-p '())))
 
+(ert-deftest pharo-smalltalk-success-p-accepts-glyph-ok-flag ()
+  "Prefer the Glyph `ok' flag over the legacy `success' key when both
+are present, but keep falling back to `success' when `ok' is absent."
+  (should (pharo-smalltalk--success-p '((ok . t) (success . :json-false))))
+  (should-not (pharo-smalltalk--success-p
+               '((ok . :json-false) (success . t))))
+  (should (pharo-smalltalk--success-p '((ok . t))))
+  (should-not (pharo-smalltalk--success-p '((ok . :json-false))))
+  ;; No `ok' at all falls through to `success'.
+  (should (pharo-smalltalk--success-p '((success . t))))
+  (should-not (pharo-smalltalk--success-p '((success . :json-false)))))
+
 (ert-deftest pharo-smalltalk-result-signals-on-failure ()
   (let ((pharo-smalltalk-last-response nil)
         (pharo-smalltalk-last-result 'before)

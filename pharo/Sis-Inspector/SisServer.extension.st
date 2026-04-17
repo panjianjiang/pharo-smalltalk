@@ -4,7 +4,7 @@ Extension { #name : 'SisServer' }
 SisServer >> handleInspectExpression: request [
 	"Evaluate the `expression' JSON body field and return the SisInspector
 	tree for its result, with drill-down refs registered server-side."
-	^ self returnResultDo: [
+	^ self wrappedResultDo: [
 		| json expression |
 		json := NeoJSONReader fromString: request entity contents.
 		expression := json at: #expression.
@@ -16,7 +16,7 @@ SisServer >> handleInspectRef: request [
 	"Look up the object under the `ref' query param (integer) and return
 	its inspection tree.  Raises a user-facing error when the ref has
 	been evicted from the registry."
-	^ self returnResultDo: [
+	^ self wrappedResultDo: [
 		| raw ref |
 		raw := request at: #ref.
 		ref := raw asNumber truncated.

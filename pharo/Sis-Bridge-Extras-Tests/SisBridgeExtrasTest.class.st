@@ -127,15 +127,19 @@ SisBridgeExtrasTest >> testEvalReturnsTranscriptPayloadOnFailure [
 
 { #category : 'tests' }
 SisBridgeExtrasTest >> testTranscriptPollReturnsEntriesFromEval [
-	| cleared resp poll |
+	| cleared resp poll pollResult |
 	cleared := self transcriptClearResponse.
+	self assert: ((cleared at: #result) at: 'kind') equals: 'ack'.
 	self assert: ((cleared at: #result) at: 'seq') equals: 0.
 	resp := self evalResponseForCode: 'Transcript show: ''poll''; cr. 1 + 2'.
 	self assert: (resp at: #success).
 	poll := self transcriptPollResponseSince: 0.
 	self assert: (poll at: #success).
-	self assert: (((poll at: #result) at: 'text') includesSubstring: 'poll').
-	self assert: (((poll at: #result) at: 'seq') >= 1)
+	pollResult := poll at: #result.
+	self assert: (pollResult at: 'kind') equals: 'transcript_chunk'.
+	self assert: ((pollResult at: 'cursor') beginsWith: 'tr:').
+	self assert: ((pollResult at: 'text') includesSubstring: 'poll').
+	self assert: ((pollResult at: 'seq') >= 1)
 ]
 
 { #category : 'tests' }
@@ -329,6 +333,130 @@ SisBridgeExtrasTest >> testCompileMethodOverwriteCarriesPreviousSource [
 		self assert: ((second at: #result) at: 'overwritten').
 		self assert: ((second at: #result) at: 'previous_source')
 			equals: 'a	^ 1'
+	] ensure: [ self ensureDemoClassAbsent ]
+]
+
+{ #category : 'tests' }
+SisBridgeExtrasTest >> testEvalEnvelopeDualWritesOkAndMeta [
+	| resp |
+	resp := self evalResponseForCode: '1 + 2'.
+	self assert: (resp at: #ok).
+	self assert: (resp at: #success).
+	self assert: ((resp at: #meta) includesKey: 'duration_ms').
+	self assert: ((resp at: #meta) at: 'duration_ms') >= 0
+]
+
+{ #category : 'tests' }
+SisBridgeExtrasTest >> testEvalErrorCarriesEvalErrorCode [
+	| resp error |
+	resp := self evalResponseForCode: 'self notAValidThing'.
+	self deny: (resp at: #ok).
+	self deny: (resp at: #success).
+	error := resp at: #error.
+	self assert: (error at: 'code') equals: 'eval_error'.
+	self assert: ((error at: 'message') isString).
+	self assert: (error includesKey: 'stack').
+	self assert: (error includesKey: 'stack_trace')
+]
+
+{ #category : 'tests' }
+SisBridgeExtrasTest >> testCompileMethodResultCarriesGlyphKindAndStatus [
+	| first unchanged updated |
+	self ensureDemoClassAbsent.
+	[
+		self compileClassResponseFor: (Dictionary new
+			at: #class_name put: 'SisCompileApiDemo';
+			at: #superclass put: 'Object';
+			at: #package put: 'Sis-Compile-Api-Demo';
+			at: #inst_vars put: #('x');
+			yourself).
+		first := self compileMethodResponseFor: (Dictionary new
+			at: #class_name put: 'SisCompileApiDemo';
+			at: #method_source put: 'v	^ x';
+			at: #side put: 'instance';
+			yourself).
+		unchanged := self compileMethodResponseFor: (Dictionary new
+			at: #class_name put: 'SisCompileApiDemo';
+			at: #method_source put: 'v	^ x';
+			at: #side put: 'instance';
+			yourself).
+		updated := self compileMethodResponseFor: (Dictionary new
+			at: #class_name put: 'SisCompileApiDemo';
+			at: #method_source put: 'v	^ x * 2';
+			at: #side put: 'instance';
+			yourself).
+		self assert: ((first at: #result) at: 'kind') equals: 'compile_result'.
+		self assert: ((first at: #result) at: 'target_kind') equals: 'method'.
+		self assert: ((first at: #result) at: 'status') equals: 'created'.
+		self assert: ((first at: #result) at: 'side') equals: 'instance'.
+		self assert: ((unchanged at: #result) at: 'status') equals: 'unchanged'.
+		self assert: ((updated at: #result) at: 'status') equals: 'updated'
+	] ensure: [ self ensureDemoClassAbsent ]
+]
+
+{ #category : 'tests' }
+SisBridgeExtrasTest >> testCompileMethodAcceptsSideClassString [
+	| resp |
+	self ensureDemoClassAbsent.
+	[
+		self compileClassResponseFor: (Dictionary new
+			at: #class_name put: 'SisCompileApiDemo';
+			at: #superclass put: 'Object';
+			at: #package put: 'Sis-Compile-Api-Demo';
+			yourself).
+		resp := self compileMethodResponseFor: (Dictionary new
+			at: #class_name put: 'SisCompileApiDemo';
+			at: #method_source put: 'answer	^ 7';
+			at: #side put: 'class';
+			yourself).
+		self assert: ((resp at: #result) at: 'side') equals: 'class'.
+		self assert: ((resp at: #result) at: 'is_class_method').
+		self assert:
+			((Smalltalk globals at: #SisCompileApiDemo) class
+				canUnderstand: #answer)
+	] ensure: [ self ensureDemoClassAbsent ]
+]
+
+{ #category : 'tests' }
+SisBridgeExtrasTest >> testCompileMethodErrorCodeIsCompileError [
+	| resp |
+	self ensureDemoClassAbsent.
+	[
+		self compileClassResponseFor: (Dictionary new
+			at: #class_name put: 'SisCompileApiDemo';
+			at: #superclass put: 'Object';
+			at: #package put: 'Sis-Compile-Api-Demo';
+			yourself).
+		resp := self compileMethodResponseFor: (Dictionary new
+			at: #class_name put: 'SisCompileApiDemo';
+			at: #method_source put: 'broken
+	@@@';
+			yourself).
+		self deny: (resp at: #ok).
+		self assert: ((resp at: #error) at: 'code') equals: 'compile_error'.
+		self assert: ((resp at: #error) at: 'line') equals: 2
+	] ensure: [ self ensureDemoClassAbsent ]
+]
+
+{ #category : 'tests' }
+SisBridgeExtrasTest >> testCompileClassResultCarriesGlyphKindAndStatus [
+	| first second |
+	self ensureDemoClassAbsent.
+	[
+		first := self compileClassResponseFor: (Dictionary new
+			at: #class_name put: 'SisCompileApiDemo';
+			at: #superclass put: 'Object';
+			at: #package put: 'Sis-Compile-Api-Demo';
+			yourself).
+		second := self compileClassResponseFor: (Dictionary new
+			at: #class_name put: 'SisCompileApiDemo';
+			at: #superclass put: 'Object';
+			at: #package put: 'Sis-Compile-Api-Demo';
+			yourself).
+		self assert: ((first at: #result) at: 'kind') equals: 'compile_result'.
+		self assert: ((first at: #result) at: 'target_kind') equals: 'class'.
+		self assert: ((first at: #result) at: 'status') equals: 'created'.
+		self assert: ((second at: #result) at: 'status') equals: 'updated'
 	] ensure: [ self ensureDemoClassAbsent ]
 ]
 
