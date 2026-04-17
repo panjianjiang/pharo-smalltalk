@@ -615,6 +615,43 @@ JSON; arrays go through as JSON arrays, not Smalltalk string fragments."
         (should (equal (alist-get 'inst_vars data) ["a" "b"]))
         (should (vectorp (alist-get 'class_vars data)))))))
 
+(ert-deftest pharo-smalltalk-remove-method-posts-structured-payload ()
+  "Removing a method should POST to /remove-method and return the server result."
+  (let (captured)
+    (cl-letf (((symbol-function 'pharo-smalltalk--request)
+               (lambda (endpoint &rest kwargs)
+                 (setq captured (cons endpoint kwargs))
+                 '((success . t)
+                   (result . ((class_name . "Demo")
+                              (selector . "answer")
+                              (is_class_method . t)
+                              (existed . t)
+                              (removed . t)))))))
+      (should (equal (alist-get 'removed
+                                (pharo-smalltalk-remove-method "Demo" "answer" t))
+                     t))
+      (should (equal (car captured) "/remove-method"))
+      (let ((data (plist-get (cdr captured) :data)))
+        (should (equal (alist-get 'class_name data) "Demo"))
+        (should (equal (alist-get 'selector data) "answer"))
+        (should (equal (alist-get 'is_class_method data) "true"))))))
+
+(ert-deftest pharo-smalltalk-remove-class-posts-structured-payload ()
+  "Removing a class should POST to /remove-class and return the server result."
+  (let (captured)
+    (cl-letf (((symbol-function 'pharo-smalltalk--request)
+               (lambda (endpoint &rest kwargs)
+                 (setq captured (cons endpoint kwargs))
+                 '((success . t)
+                   (result . ((class_name . "Demo")
+                              (existed . :json-false)
+                              (removed . :json-false)))))))
+      (should (eq (alist-get 'removed (pharo-smalltalk-remove-class "Demo"))
+                  :json-false))
+      (should (equal (car captured) "/remove-class"))
+      (let ((data (plist-get (cdr captured) :data)))
+        (should (equal (alist-get 'class_name data) "Demo"))))))
+
 (ert-deftest pharo-smalltalk-transcript-append-writes-text-and-seq ()
   "Appending a payload inserts its text, advances the seq cursor, and
 emits a drop notice when the server reports dropped entries."

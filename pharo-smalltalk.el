@@ -1336,6 +1336,38 @@ Smalltalk escaping."
     (run-hooks 'pharo-smalltalk-after-mutation-hook)
     name))
 
+(defun pharo-smalltalk-remove-method (class-name selector &optional class-side-p)
+  "Remove SELECTOR from CLASS-NAME, optionally on the class side.
+Returns the server result alist with `existed' and `removed' fields."
+  (let ((response (pharo-smalltalk--result
+                   (pharo-smalltalk--request
+                    "/remove-method"
+                    :type "POST"
+                    :data `((class_name . ,class-name)
+                            (selector . ,selector)
+                            (is_class_method . ,(if class-side-p "true" "false")))))))
+    (message "Removed %s%s>>%s (%s)"
+             class-name
+             (if class-side-p " class" "")
+             selector
+             (if (alist-get 'removed response) "removed" "no-op"))
+    (run-hooks 'pharo-smalltalk-after-mutation-hook)
+    response))
+
+(defun pharo-smalltalk-remove-class (class-name)
+  "Remove CLASS-NAME from the live image.
+Returns the server result alist with `existed' and `removed' fields."
+  (let ((response (pharo-smalltalk--result
+                   (pharo-smalltalk--request
+                    "/remove-class"
+                    :type "POST"
+                    :data `((class_name . ,class-name))))))
+    (message "Removed class %s (%s)"
+             class-name
+             (if (alist-get 'removed response) "removed" "no-op"))
+    (run-hooks 'pharo-smalltalk-after-mutation-hook)
+    response))
+
 (defvar pharo-smalltalk--all-classes-cache nil
   "Cached vector of (NAMES . TIMESTAMP) for completion.")
 
@@ -1784,6 +1816,33 @@ This is an alias in spirit to Geiser/SLY style send-defun behavior."
       (setq-local buffer-read-only nil))
     (display-buffer (current-buffer))))
 
+(defun pharo-smalltalk-remove-method-command (class-name method-name class-side-p)
+  "Interactively remove METHOD-NAME from CLASS-NAME.
+When CLASS-SIDE-P is non-nil, remove the class-side selector."
+  (interactive
+   (let* ((class-name (pharo-smalltalk--read-class-name
+                       "Method class: "
+                       pharo-smalltalk-buffer-class-name))
+          (class-side-p (if pharo-smalltalk-buffer-class-name
+                            (y-or-n-p (format "Class-side method on %s? " class-name))
+                          (y-or-n-p "Class-side method? ")))
+          (selector (completing-read "Remove selector: "
+                                     (pharo-smalltalk-class-selectors class-name class-side-p)
+                                     nil 'confirm
+                                     (or (and (eq pharo-smalltalk-buffer-source-kind 'method)
+                                              (pharo-smalltalk-selector-from-source
+                                               (buffer-substring-no-properties
+                                                (point-min) (point-max))))
+                                         thing-at-point 'symbol t))))
+     (list class-name selector class-side-p)))
+  (pharo-smalltalk-remove-method class-name method-name class-side-p))
+
+(defun pharo-smalltalk-remove-class-command (class-name)
+  "Interactively remove CLASS-NAME from the live image."
+  (interactive (list (pharo-smalltalk--read-class-name "Remove class: "
+                                                       pharo-smalltalk-buffer-class-name)))
+  (pharo-smalltalk-remove-class class-name))
+
 (defun pharo-smalltalk-workspace (&optional new-buffer)
   "Open or switch to a Pharo workspace buffer.
 With prefix argument NEW-BUFFER, create a fresh workspace buffer."
@@ -1859,6 +1918,8 @@ With prefix argument NEW-BUFFER, create a fresh workspace buffer."
 (define-key pharo-smalltalk-command-map (kbd "J") #'pharo-smalltalk-inspect-class-at-point-with-inspector)
 (define-key pharo-smalltalk-command-map (kbd "l") #'pharo-smalltalk-inspect-last-result)
 (define-key pharo-smalltalk-command-map (kbd "o") #'pharo-smalltalk-transcript-open)
+(define-key pharo-smalltalk-command-map (kbd "K") #'pharo-smalltalk-remove-method-command)
+(define-key pharo-smalltalk-command-map (kbd "X") #'pharo-smalltalk-remove-class-command)
 (defvar pharo-smalltalk-test-map
   (make-sparse-keymap)
   "Prefix keymap for Pharo Smalltalk test commands.")

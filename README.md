@@ -210,12 +210,17 @@ JSON then has to escape:
 | --- | --- | --- |
 | `POST /compile-method` | `{class_name, method_source, category, is_class_method}` | `{selector, class_name, is_class_method, category}` |
 | `POST /compile-class` | `{class_name, superclass, package, tag, inst_vars, class_vars, class_inst_vars}` | `{class_name, created}` |
+| `POST /remove-method` | `{class_name, selector, is_class_method}` | `{class_name, selector, is_class_method, existed, removed}` |
+| `POST /remove-class` | `{class_name}` | `{class_name, existed, removed}` |
 
 `pharo-smalltalk-compile-method` and
 `pharo-smalltalk-compile-class-definition` go through these; the
 Tonel `Class { … }` text you pass in gets parsed client-side and the
 fields are submitted as JSON, with `inst_vars` / `class_vars` /
 `class_inst_vars` as proper arrays.
+`pharo-smalltalk-remove-method` and `pharo-smalltalk-remove-class`
+wrap the removal endpoints, with interactive commands on `C-c s K`
+and `C-c s X`.
 
 ### Navigation
 
