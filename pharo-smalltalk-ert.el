@@ -652,6 +652,33 @@ JSON; arrays go through as JSON arrays, not Smalltalk string fragments."
       (let ((data (plist-get (cdr captured) :data)))
         (should (equal (alist-get 'class_name data) "Demo"))))))
 
+(ert-deftest pharo-smalltalk-remove-current-method-uses-buffer-metadata ()
+  "Method source buffers should remove the selector parsed from the buffer."
+  (with-temp-buffer
+    (insert "answer\n\t^ 42")
+    (setq-local pharo-smalltalk-buffer-source-kind 'method)
+    (setq-local pharo-smalltalk-buffer-class-name "Demo")
+    (setq-local pharo-smalltalk-buffer-class-side-p t)
+    (cl-letf (((symbol-function 'y-or-n-p) (lambda (&rest _) t))
+              ((symbol-function 'pharo-smalltalk-remove-method)
+               (lambda (class selector class-side-p)
+                 (should (equal class "Demo"))
+                 (should (equal selector "answer"))
+                 (should class-side-p)
+                 'ok)))
+      (should (equal (pharo-smalltalk-remove-current-method) 'ok)))))
+
+(ert-deftest pharo-smalltalk-remove-current-class-uses-buffer-metadata ()
+  "Class source buffers should remove the current target class."
+  (with-temp-buffer
+    (setq-local pharo-smalltalk-buffer-class-name "Demo")
+    (cl-letf (((symbol-function 'y-or-n-p) (lambda (&rest _) t))
+              ((symbol-function 'pharo-smalltalk-remove-class)
+               (lambda (class-name)
+                 (should (equal class-name "Demo"))
+                 'ok)))
+      (should (equal (pharo-smalltalk-remove-current-class) 'ok)))))
+
 (ert-deftest pharo-smalltalk-transcript-append-writes-text-and-seq ()
   "Appending a payload inserts its text, advances the seq cursor, and
 emits a drop notice when the server reports dropped entries."

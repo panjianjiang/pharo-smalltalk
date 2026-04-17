@@ -59,6 +59,7 @@
     (define-key map (kbd "^")   #'pharo-smalltalk-browser-back)
     (define-key map (kbd "g")   #'pharo-smalltalk-browser-refresh)
     (define-key map (kbd "c")   #'pharo-smalltalk-browser-toggle-side)
+    (define-key map (kbd "D")   #'pharo-smalltalk-browser-remove-at-point)
     (define-key map (kbd "q")   #'quit-window)
     map))
 
@@ -201,6 +202,36 @@
      (pharo-smalltalk-browser--render-methods
       class (if (eq side 'instance) 'class 'instance)))
     (_ (user-error "Toggle only available in the method view"))))
+
+(defun pharo-smalltalk-browser-remove-at-point ()
+  "Remove the browser item at point when the current view supports it."
+  (interactive)
+  (pcase pharo-smalltalk-browser--current
+    (`(classes ,_package)
+     (let ((class-name (aref (tabulated-list-get-entry) 0)))
+       (unless class-name
+         (user-error "Nothing at point"))
+       (unless (y-or-n-p (format "Remove class %s? " class-name))
+         (user-error "Aborted"))
+       (pharo-smalltalk-remove-class class-name)
+       (pharo-smalltalk-browser-refresh)))
+    (`(methods ,_class ,_side)
+     (let ((spec (tabulated-list-get-id)))
+       (unless spec
+         (user-error "Nothing at point"))
+       (unless (y-or-n-p
+                (format "Remove %s%s>>%s? "
+                        (pharo-smalltalk-method-spec-class-name spec)
+                        (if (pharo-smalltalk-method-spec-class-side-p spec) " class" "")
+                        (pharo-smalltalk-method-spec-selector spec)))
+         (user-error "Aborted"))
+       (pharo-smalltalk-remove-method
+        (pharo-smalltalk-method-spec-class-name spec)
+        (pharo-smalltalk-method-spec-selector spec)
+        (pharo-smalltalk-method-spec-class-side-p spec))
+       (pharo-smalltalk-browser-refresh)))
+    (_
+     (user-error "Remove is available in class and method browser views only"))))
 
 ;;;###autoload
 (defun pharo-smalltalk-browse ()

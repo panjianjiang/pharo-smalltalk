@@ -1843,6 +1843,34 @@ When CLASS-SIDE-P is non-nil, remove the class-side selector."
                                                        pharo-smalltalk-buffer-class-name)))
   (pharo-smalltalk-remove-class class-name))
 
+(defun pharo-smalltalk-remove-current-method ()
+  "Remove the method described by the current buffer metadata."
+  (interactive)
+  (unless (eq pharo-smalltalk-buffer-source-kind 'method)
+    (user-error "Current buffer is not a method source buffer"))
+  (unless pharo-smalltalk-buffer-class-name
+    (user-error "Current buffer does not target a class"))
+  (let ((selector (pharo-smalltalk-selector-from-source
+                   (buffer-substring-no-properties (point-min) (point-max)))))
+    (unless (y-or-n-p (format "Remove %s%s>>%s? "
+                              pharo-smalltalk-buffer-class-name
+                              (if pharo-smalltalk-buffer-class-side-p " class" "")
+                              selector))
+      (user-error "Aborted"))
+    (pharo-smalltalk-remove-method
+     pharo-smalltalk-buffer-class-name
+     selector
+     pharo-smalltalk-buffer-class-side-p)))
+
+(defun pharo-smalltalk-remove-current-class ()
+  "Remove the class described by the current buffer metadata."
+  (interactive)
+  (unless pharo-smalltalk-buffer-class-name
+    (user-error "Current buffer does not target a class"))
+  (unless (y-or-n-p (format "Remove class %s? " pharo-smalltalk-buffer-class-name))
+    (user-error "Aborted"))
+  (pharo-smalltalk-remove-class pharo-smalltalk-buffer-class-name))
+
 (defun pharo-smalltalk-workspace (&optional new-buffer)
   "Open or switch to a Pharo workspace buffer.
 With prefix argument NEW-BUFFER, create a fresh workspace buffer."
@@ -1889,6 +1917,8 @@ With prefix argument NEW-BUFFER, create a fresh workspace buffer."
 (define-key pharo-smalltalk-mode-map (kbd "C-c C-k") #'pharo-smalltalk-load-file)
 (define-key pharo-smalltalk-mode-map (kbd "C-c C-w") #'pharo-smalltalk-workspace)
 (define-key pharo-smalltalk-mode-map (kbd "C-c C-i") #'pharo-smalltalk-inspect-class-at-point)
+(define-key pharo-smalltalk-mode-map (kbd "C-c C-d m") #'pharo-smalltalk-remove-current-method)
+(define-key pharo-smalltalk-mode-map (kbd "C-c C-d c") #'pharo-smalltalk-remove-current-class)
 
 (define-key pharo-smalltalk-command-map (kbd "e") #'pharo-smalltalk-eval-region-or-line)
 (define-key pharo-smalltalk-command-map (kbd "E") #'pharo-smalltalk-eval-region)
