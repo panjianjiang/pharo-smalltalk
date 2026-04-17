@@ -16,6 +16,7 @@
 (require 'pharo-smalltalk-test)
 (require 'pharo-smalltalk-browser)
 (require 'pharo-smalltalk-inspector)
+(require 'pharo-smalltalk-transcript)
 
 (ert-deftest pharo-smalltalk-package-metadata-is-available ()
   (should (string-match-p "\\`[0-9]+\\.[0-9]+\\.[0-9]+\\'"
@@ -561,6 +562,33 @@ line so navigation can recover the ref for drill-down."
       (pharo-smalltalk-eval "1" :inspect t)
       (should (equal (plist-get captured :params)
                      '((inspect . "true")))))))
+
+(ert-deftest pharo-smalltalk-transcript-append-writes-text-and-seq ()
+  "Appending a payload inserts its text, advances the seq cursor, and
+emits a drop notice when the server reports dropped entries."
+  (with-temp-buffer
+    (pharo-smalltalk-transcript-mode)
+    (pharo-smalltalk-transcript--stop-timer) ; don't fight the timer in ERT
+    (pharo-smalltalk-transcript--append
+     (current-buffer)
+     '((seq . 3) (text . "hello\rworld\r") (dropped . 0)))
+    (should (equal pharo-smalltalk-transcript--seq 3))
+    (should (string-match-p "hello\nworld\n" (buffer-string)))
+    (pharo-smalltalk-transcript--append
+     (current-buffer)
+     '((seq . 9) (text . "more\r") (dropped . 5)))
+    (should (equal pharo-smalltalk-transcript--seq 9))
+    (should (string-match-p "5 transcript entries dropped" (buffer-string)))
+    (should (string-match-p "more\n" (buffer-string)))))
+
+(ert-deftest pharo-smalltalk-transcript-append-ignores-dead-buffer ()
+  "Callbacks that fire after the buffer is killed must not signal."
+  (let ((buf (generate-new-buffer " *ert-transcript*")))
+    (with-current-buffer buf (pharo-smalltalk-transcript-mode))
+    (kill-buffer buf)
+    (pharo-smalltalk-transcript--append buf '((seq . 1) (text . "x") (dropped . 0)))
+    ;; No error raised is the assertion.
+    (should t)))
 
 (ert-deftest pharo-smalltalk-inspector-drill-pushes-stack ()
   "Drilling from one view stashes the previous tree on the back stack."

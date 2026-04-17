@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+- **Live Transcript channel**: server installs a `SisTranscriptTee`
+  that wraps the real `Transcript`, forwarding every write to the
+  UI while also recording into a capped ring (4096 entries) with a
+  monotonic sequence number.  New endpoints
+  `GET /transcript/poll?since=<seq>` and `POST /transcript/clear`
+  expose it.  `SisServer>>start' installs the tee and (idempotently)
+  enriches the teapot with the two routes on every start/restart.
+  `transcriptCapturedDuring:` now slices the tee between before- and
+  after-sequence instead of swapping `Transcript` for a test
+  instance, so eval captures and the live channel share a single
+  source of truth.
+- **Emacs side**: new `pharo-smalltalk-transcript.el` module.
+  `pharo-smalltalk-transcript-open` (bound to `C-c s o`) opens
+  `*Pharo Transcript*` with a major mode that polls the server
+  asynchronously every second (configurable via
+  `pharo-smalltalk-transcript-poll-interval').  Keys: `g` force
+  poll, `c` clear both sides, `t` toggle follow, `q` quit.
+  Appends carry a drop-notice line when the server reports the
+  ring evicted entries past the cursor.  Line-ending normalized
+  via the existing `--normalize-newlines` helper.
+- Pharo tests +9 (`SisTranscriptTeeTest` — record + capacity +
+  snapshot/slice + drop reporting + forward-to-original + wrapped
+  `neoJsonOn:`).  Emacs ERT 39 → 41 (append writes text and
+  advances seq; dead-buffer callback is a no-op).
+- Live verified: forked background process (`Delay forSeconds: 1`
+  loop that `Transcript show:` every second) streams into the live
+  buffer in real time while the main Emacs command loop stays
+  responsive.
+
 - **Inspectable eval results**: `/eval` now takes an `inspect=true`
   query parameter.  When set, the response carries a `result_tree`
   field built with `SisInspector renderTreeOf:`, so callers can drill

@@ -119,6 +119,7 @@ With the default `C-c s` prefix:
 | `C-c s j` | `pharo-smalltalk-inspect-expression` (live object inspector) |
 | `C-c s J` | inspect the class name at point |
 | `C-c s l` | inspect the last eval result (captured by `C-c s e`) |
+| `C-c s o` | open the live `*Pharo Transcript*` buffer |
 | `C-c s P` | `pharo-smalltalk-ping` |
 | `C-c s t c/p/s/r` | run test class / package / smoke / re-run |
 
@@ -176,6 +177,28 @@ Drill-down is ref-based: every rendered row carries an integer ref into
 a per-image registry (`SisInspector class >> refs`), so child views
 show the live object, not a re-evaluation.  Printed strings are capped
 at 256 characters; large collections at 200 rows.
+
+### Live Transcript
+
+`C-c s o` (`pharo-smalltalk-transcript-open`) opens
+`*Pharo Transcript*` and starts tailing the image's Transcript via an
+async poll loop.  Unlike the transcript text returned on each `/eval`
+(which only covers that single call), this catches output from
+background processes, Morphic `step` methods, event callbacks —
+anything that writes to Transcript between calls.
+
+| Key | Action |
+| --- | --- |
+| `g` | force a poll immediately |
+| `c` | clear both the buffer and the server-side tee |
+| `t` | toggle auto-follow (pause / resume polling) |
+| `q` | quit the window (also stops the timer) |
+
+The server installs a `SisTranscriptTee` that wraps the real
+Transcript, forwarding every write to the UI while also recording
+capped-ring entries with a monotonic sequence number.  Polls request
+`?since=<seq>`; dropped entries (ring eviction past the cursor) are
+surfaced as a `[… N entries dropped …]` line in the buffer.
 
 ### Navigation
 

@@ -83,13 +83,14 @@
   :type 'boolean
   :group 'pharo-smalltalk)
 
-(defcustom pharo-smalltalk-package-modules '(xref capf test browser inspector)
+(defcustom pharo-smalltalk-package-modules '(xref capf test browser inspector transcript)
   "Optional support modules loaded by `pharo-smalltalk-install'."
   :type '(set (const :tag "xref backend" xref)
               (const :tag "completion and eldoc" capf)
               (const :tag "test runner" test)
               (const :tag "browser" browser)
-              (const :tag "inspector" inspector))
+              (const :tag "inspector" inspector)
+              (const :tag "live transcript" transcript))
   :group 'pharo-smalltalk)
 
 (defcustom pharo-smalltalk-global-command-key "C-c s"
@@ -141,6 +142,7 @@ or nil when the server wasn't asked to inspect the last result.")
 (autoload 'pharo-smalltalk-inspect-class-at-point-with-inspector
   "pharo-smalltalk-inspector" nil t)
 (autoload 'pharo-smalltalk-inspect-last-result "pharo-smalltalk-inspector" nil t)
+(autoload 'pharo-smalltalk-transcript-open "pharo-smalltalk-transcript" nil t)
 
 (defvar pharo-smalltalk-command-map
   (let ((map (make-sparse-keymap)))
@@ -1842,6 +1844,7 @@ With prefix argument NEW-BUFFER, create a fresh workspace buffer."
 (define-key pharo-smalltalk-command-map (kbd "j") #'pharo-smalltalk-inspect-expression)
 (define-key pharo-smalltalk-command-map (kbd "J") #'pharo-smalltalk-inspect-class-at-point-with-inspector)
 (define-key pharo-smalltalk-command-map (kbd "l") #'pharo-smalltalk-inspect-last-result)
+(define-key pharo-smalltalk-command-map (kbd "o") #'pharo-smalltalk-transcript-open)
 (defvar pharo-smalltalk-test-map
   (make-sparse-keymap)
   "Prefix keymap for Pharo Smalltalk test commands.")
@@ -1862,7 +1865,8 @@ With prefix argument NEW-BUFFER, create a fresh workspace buffer."
       ('capf (require 'pharo-smalltalk-capf))
       ('test (require 'pharo-smalltalk-test))
       ('browser (require 'pharo-smalltalk-browser))
-      ('inspector (require 'pharo-smalltalk-inspector)))))
+      ('inspector (require 'pharo-smalltalk-inspector))
+      ('transcript (require 'pharo-smalltalk-transcript)))))
 
 (defun pharo-smalltalk--register-auto-modes ()
   "Register `pharo-smalltalk-mode' for `pharo-smalltalk-auto-mode-patterns'."

@@ -69,19 +69,37 @@ SisServer >> returnError: anError by: resultDict [
 
 { #category : '*Sis-Bridge-Extras' }
 SisServer >> transcriptCapturedDuring: aBlock [
-	"Evaluate aBlock with a dedicated Transcript instance and answer
-	the captured text without depending on Transcript internals."
-	| originalTranscript transcriptClass capturedTranscript |
-	originalTranscript := Smalltalk globals at: #Transcript.
-	transcriptClass := Smalltalk globals
-		at: #StThreadSafeTranscript
-		ifAbsent: [ originalTranscript class ].
-	capturedTranscript := (transcriptClass respondsTo: #createTestingInstance)
-		ifTrue: [ transcriptClass createTestingInstance ]
-		ifFalse: [ transcriptClass basicNew initialize; yourself ].
-	[
-		Smalltalk globals at: #Transcript put: capturedTranscript.
-		aBlock value ]
-		ensure: [ Smalltalk globals at: #Transcript put: originalTranscript ].
-	^ capturedTranscript contents
+	"Slice the always-on SisTranscriptTee for the sequence range aBlock
+	advances it through. Keeps eval captures behaving like before, but
+	also lets /transcript/poll continue to see the same output because
+	the tee is a single source of truth."
+	| tee beforeSeq |
+	tee := SisTranscriptTee install.
+	beforeSeq := tee sequence.
+	aBlock value.
+	^ tee textBetween: beforeSeq and: tee sequence
+]
+
+{ #category : '*Sis-Bridge-Extras' }
+SisServer >> handleTranscriptPoll: request [
+	^ self returnResultDo: [
+		| since |
+		since := (request at: #since ifAbsent: [ '0' ]) asNumber truncated.
+		SisTranscriptTee install snapshotSince: since ]
+]
+
+{ #category : '*Sis-Bridge-Extras' }
+SisServer >> handleTranscriptClear: request [
+	^ self returnResultDo: [
+		SisTranscriptTee install clear.
+		Dictionary new at: 'seq' put: 0; yourself ]
+]
+
+{ #category : '*Sis-Bridge-Extras' }
+SisServer >> start [
+	"Ensure the transcript tee is installed and our extra routes are
+	registered on the current teapot, then hand off to Teapot's start."
+	SisTranscriptTee install.
+	SisTranscriptTee ensureRoutesOn: self.
+	self teapot start
 ]
