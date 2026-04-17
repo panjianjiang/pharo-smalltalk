@@ -1837,7 +1837,7 @@ When CLASS-SIDE-P is non-nil, remove the class-side selector."
                                               (pharo-smalltalk-selector-from-source
                                                (buffer-substring-no-properties
                                                 (point-min) (point-max))))
-                                         thing-at-point 'symbol t))))
+                                         (thing-at-point 'symbol t)))))
      (list class-name selector class-side-p)))
   (pharo-smalltalk-remove-method class-name method-name class-side-p))
 
