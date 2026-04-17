@@ -181,6 +181,21 @@
         (should (equal (xref-location-group (xref-item-location item))
                        "Superclass chain"))))))
 
+(ert-deftest pharo-smalltalk-test-parse-summary-handles-singular-plural ()
+  (require 'pharo-smalltalk-test)
+  (should
+   (equal (pharo-smalltalk-test--parse-summary
+           "2 ran, 1 passed, 0 skipped, 0 expected failures, 1 failure, 0 errors")
+          '(2 1 0 0 1 0)))
+  (should
+   (equal (pharo-smalltalk-test--parse-summary
+           "5 ran, 3 passed, 0 skipped, 0 expected failures, 2 failures, 0 errors")
+          '(5 3 0 0 2 0)))
+  (should
+   (equal (pharo-smalltalk-test--parse-summary
+           "3 ran, 2 passed, 0 skipped, 0 expected failure, 0 failures, 1 error")
+          '(3 2 0 0 0 1))))
+
 (ert-deftest pharo-smalltalk-success-p-handles-json-false ()
   (should (pharo-smalltalk--success-p '((success . t))))
   (should-not (pharo-smalltalk--success-p '((success . :json-false))))

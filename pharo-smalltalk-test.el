@@ -25,14 +25,16 @@
   "Face for failing test totals.")
 
 (defun pharo-smalltalk-test--parse-summary (text)
-  "Extract (ran passed skipped expected-failures failures errors) from TEXT."
+  "Extract (ran passed skipped expected-failures failures errors) from TEXT.
+Pharo pluralizes its summary tokens, so each label is matched as either
+its singular or plural form (e.g., `1 failure' vs `2 failures')."
   (when (string-match
          (concat "\\([0-9]+\\) ran, "
                  "\\([0-9]+\\) passed, "
                  "\\([0-9]+\\) skipped, "
-                 "\\([0-9]+\\) expected failures, "
-                 "\\([0-9]+\\) failures, "
-                 "\\([0-9]+\\) errors")
+                 "\\([0-9]+\\) expected failures?, "
+                 "\\([0-9]+\\) failures?, "
+                 "\\([0-9]+\\) errors?")
          text)
     (mapcar #'string-to-number
             (list (match-string 1 text) (match-string 2 text)

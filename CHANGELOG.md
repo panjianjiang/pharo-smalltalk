@@ -26,9 +26,12 @@
   `*Pharo <action>*` instead of a single shared buffer, so concurrent
   searches don't clobber each other.
 - Remove ~30 stale `my/smalltalk-*` and unprefixed `pharo-*` aliases.
-- ERT suite expanded from 14 → 20 tests covering success-predicate,
+- ERT suite expanded from 14 → 21 tests covering success-predicate,
   failure-path raising, browser cache hit/invalidate, warn-once
-  throttling, and per-action buffer naming.
+  throttling, per-action buffer naming, and test-summary parsing.
+- **Fix test summary parser**: `--parse-summary` now matches Pharo's
+  singular labels (`1 failure`, `1 error`); previously the structured
+  summary line was silently dropped whenever a count was exactly one.
 
 ## 0.1.0 - 2026-04-16
 
