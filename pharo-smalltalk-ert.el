@@ -107,13 +107,17 @@
 
 (ert-deftest pharo-smalltalk-capf-cache-invalidates-after-mutation ()
   (let ((pharo-smalltalk-capf--method-cache (make-hash-table :test 'equal))
-        (pharo-smalltalk-capf--method-source-cache (make-hash-table :test 'equal)))
+        (pharo-smalltalk--method-source-cache (make-hash-table :test 'equal))
+        (pharo-smalltalk--class-comment-cache (make-hash-table :test 'equal)))
     (puthash "foo" (cons '("foo:") (float-time)) pharo-smalltalk-capf--method-cache)
     (puthash '("Class" "foo:" nil) (cons "foo: x" (float-time))
-             pharo-smalltalk-capf--method-source-cache)
+             pharo-smalltalk--method-source-cache)
+    (puthash "Class" (cons "the comment" (float-time))
+             pharo-smalltalk--class-comment-cache)
     (run-hooks 'pharo-smalltalk-after-mutation-hook)
     (should (= (hash-table-count pharo-smalltalk-capf--method-cache) 0))
-    (should (= (hash-table-count pharo-smalltalk-capf--method-source-cache) 0))))
+    (should (= (hash-table-count pharo-smalltalk--method-source-cache) 0))
+    (should (= (hash-table-count pharo-smalltalk--class-comment-cache) 0))))
 
 (ert-deftest pharo-smalltalk-capf-cache-prunes-oldest-entries ()
   (let ((table (make-hash-table :test 'equal)))
@@ -258,6 +262,73 @@
       (run-hooks 'pharo-smalltalk-after-mutation-hook)
       (pharo-smalltalk-list-classes "P1")
       (should (= calls 3)))))
+
+(ert-deftest pharo-smalltalk-get-method-source-uses-shared-cache ()
+  "Repeat fetches must hit the shared TTL cache, and the mutation
+hook must clear it."
+  (let ((pharo-smalltalk--method-source-cache (make-hash-table :test 'equal))
+        (pharo-smalltalk--class-source-cache (make-hash-table :test 'equal))
+        (pharo-smalltalk--class-comment-cache (make-hash-table :test 'equal))
+        (calls 0))
+    (cl-letf (((symbol-function 'pharo-smalltalk--request)
+               (lambda (&rest _)
+                 (cl-incf calls)
+                 '((success . t) (result . "doit ^ 1")))))
+      (should (equal (pharo-smalltalk-get-method-source "C" "doit") "doit ^ 1"))
+      (should (= calls 1))
+      (should (equal (pharo-smalltalk-get-method-source "C" "doit") "doit ^ 1"))
+      (should (= calls 1))
+      ;; Different side -> different key, recomputes.
+      (should (equal (pharo-smalltalk-get-method-source "C" "doit" t) "doit ^ 1"))
+      (should (= calls 2))
+      ;; Mutation hook clears it.
+      (run-hooks 'pharo-smalltalk-after-mutation-hook)
+      (should (equal (pharo-smalltalk-get-method-source "C" "doit") "doit ^ 1"))
+      (should (= calls 3)))))
+
+(ert-deftest pharo-smalltalk-get-method-source-async-dedups-in-flight ()
+  "Two overlapping async fetches for the same key must trigger one HTTP
+call and deliver the same result to both waiters."
+  (let ((pharo-smalltalk--method-source-cache (make-hash-table :test 'equal))
+        (pharo-smalltalk--in-flight-source nil)
+        (dispatched 0)
+        (received nil)
+        captured-cb)
+    (cl-letf (((symbol-function 'pharo-smalltalk--request-async)
+               (lambda (_ep cb &rest _)
+                 (cl-incf dispatched)
+                 (setq captured-cb cb))))
+      (pharo-smalltalk-get-method-source-async
+       "C" "m" nil (lambda (s) (push (cons :a s) received)))
+      (pharo-smalltalk-get-method-source-async
+       "C" "m" nil (lambda (s) (push (cons :b s) received)))
+      (should (= dispatched 1))
+      (funcall captured-cb '((success . t) (result . "m ^ 7")) nil)
+      (should (equal (sort (mapcar #'car received) #'string<) '(:a :b)))
+      (should (cl-every (lambda (e) (equal (cdr e) "m ^ 7")) received)))))
+
+(ert-deftest pharo-smalltalk-capf-eldoc-stale-guard-discards-old-replies ()
+  "Stale guard returns nil after point moves out of the original
+symbol's bounds, or when the text under the bounds has changed."
+  (with-temp-buffer
+    (pharo-smalltalk-mode)
+    (insert "OrderedCollection Other")
+    (goto-char 5)                       ; inside `OrderedCollection'
+    (let* ((bounds (pharo-smalltalk-capf--symbol-bounds))
+           (origin-bounds (cons (car bounds) (cdr bounds)))
+           (origin-buffer (current-buffer)))
+      (should (pharo-smalltalk-capf--symbol-still-at-point-p
+               origin-buffer origin-bounds "OrderedCollection"))
+      (goto-char 20)                    ; inside `Other' (point > end)
+      (should-not (pharo-smalltalk-capf--symbol-still-at-point-p
+                   origin-buffer origin-bounds "OrderedCollection"))
+      (goto-char 5)                     ; back inside, but rename the symbol
+      (let ((inhibit-read-only t))
+        (delete-region (car origin-bounds) (cdr origin-bounds))
+        (goto-char (car origin-bounds))
+        (insert "RenamedClassName"))
+      (should-not (pharo-smalltalk-capf--symbol-still-at-point-p
+                   origin-buffer origin-bounds "OrderedCollection")))))
 
 (ert-deftest pharo-smalltalk-capf-eldoc-deliver-releases-empty ()
   "An empty async response must still call eldoc CALLBACK with nil

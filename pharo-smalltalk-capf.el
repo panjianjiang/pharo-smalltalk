@@ -26,25 +26,21 @@
   :type 'integer
   :group 'pharo-smalltalk-capf)
 
-(defcustom pharo-smalltalk-capf-method-source-cache-max-entries 128
-  "Maximum number of cached method source entries."
-  :type 'integer
-  :group 'pharo-smalltalk-capf)
-
 (defcustom pharo-smalltalk-capf-min-prefix 2
   "Minimum prefix length before firing a network completion query."
   :type 'integer
   :group 'pharo-smalltalk-capf)
 
-(defvar pharo-smalltalk-capf--method-cache (make-hash-table :test 'equal))
-(defvar pharo-smalltalk-capf--method-source-cache (make-hash-table :test 'equal))
+(defvar pharo-smalltalk-capf--method-cache (make-hash-table :test 'equal)
+  "Cache for `search-methods-like' results: query -> (HITS . TIMESTAMP).")
+
+(defvar pharo-smalltalk-capf--in-flight-prefetch (make-hash-table :test 'equal)
+  "Set of selector queries currently being prefetched asynchronously.")
 
 (defun pharo-smalltalk-capf--invalidate ()
   "Drop completion caches; called on Pharo-side mutations."
   (clrhash pharo-smalltalk-capf--method-cache)
-  (clrhash pharo-smalltalk-capf--method-source-cache)
-  (when (boundp 'pharo-smalltalk-capf--class-comment-cache)
-    (clrhash pharo-smalltalk-capf--class-comment-cache)))
+  (clrhash pharo-smalltalk-capf--in-flight-prefetch))
 
 (add-hook 'pharo-smalltalk-after-mutation-hook
           #'pharo-smalltalk-capf--invalidate)
@@ -79,100 +75,39 @@
         value))))
 
 (defun pharo-smalltalk-capf--methods-like (query)
-  "Return selectors matching QUERY, cached."
-  (pharo-smalltalk-capf--cached
-   pharo-smalltalk-capf--method-cache
-   query
-   (lambda ()
-     (condition-case err
-         (pharo-smalltalk-search-methods-like query)
-       (error
-        (pharo-smalltalk--warn-once
-         'capf-methods-like "search-methods-like %S failed: %s"
-         query (error-message-string err))
-        nil)))
-   pharo-smalltalk-capf-method-cache-max-entries))
+  "Return selectors matching QUERY from cache, or nil while a prefetch flies.
+A nil return on cold cache schedules an async prefetch; the next
+completion poll (typically the next keystroke) will hit warm data."
+  (let ((cached (pharo-smalltalk-capf--cached
+                 pharo-smalltalk-capf--method-cache
+                 query
+                 (lambda () nil)
+                 pharo-smalltalk-capf-method-cache-max-entries)))
+    (or cached
+        (progn (pharo-smalltalk-capf--prefetch-methods-like query)
+               nil))))
 
-(defun pharo-smalltalk-capf--method-source (class selector class-side-p)
-  "Return method source for CLASS>>SELECTOR, cached (synchronous)."
-  (pharo-smalltalk-capf--cached
-   pharo-smalltalk-capf--method-source-cache
-   (list class selector class-side-p)
-   (lambda ()
-     (condition-case err
-         (pharo-smalltalk-get-method-source class selector class-side-p)
-       (error
-        (pharo-smalltalk--warn-once
-         (list 'capf-method-source class)
-         "get-method-source for %s>>%s failed: %s"
-         class selector (error-message-string err))
-        nil)))
-   pharo-smalltalk-capf-method-source-cache-max-entries))
-
-(defvar pharo-smalltalk-capf--class-comment-cache (make-hash-table :test 'equal)
-  "Class-name -> (COMMENT . TIMESTAMP), cached for eldoc.")
-
-(defun pharo-smalltalk-capf--cache-lookup (table key)
-  "Return cached value for KEY in TABLE if still fresh, else nil."
-  (let ((entry (gethash key table)))
-    (when (and entry (< (- (float-time) (cdr entry))
-                        pharo-smalltalk-capf-cache-ttl))
-      (car entry))))
-
-(defun pharo-smalltalk-capf--cache-store (table key value max-entries)
-  "Store VALUE under KEY in TABLE with current timestamp; prune to MAX-ENTRIES."
-  (puthash key (cons value (float-time)) table)
-  (pharo-smalltalk-capf--cache-prune table max-entries))
-
-(defun pharo-smalltalk-capf--fetch-method-source-async (class selector class-side-p k)
-  "Asynchronously fetch CLASS>>SELECTOR source, caching it.
-K is called with the source string (or nil on failure)."
-  (let ((key (list class selector class-side-p)))
+(defun pharo-smalltalk-capf--prefetch-methods-like (query)
+  "Kick off an async `/search-methods-like' for QUERY, dedup'd by query."
+  (unless (gethash query pharo-smalltalk-capf--in-flight-prefetch)
+    (puthash query t pharo-smalltalk-capf--in-flight-prefetch)
     (pharo-smalltalk--request-async
-     "/get-method-source"
+     "/search-methods-like"
      (pharo-smalltalk--unwrap-async
       (lambda (result error)
+        (remhash query pharo-smalltalk-capf--in-flight-prefetch)
         (cond
          (error
           (pharo-smalltalk--warn-once
-           (list 'capf-method-source-async class)
-           "async get-method-source for %s>>%s failed: %s"
-           class selector error)
-          (funcall k nil))
+           'capf-methods-like-prefetch
+           "prefetch search-methods-like %S failed: %s" query error))
          (t
-          (let ((src (and result (pharo-smalltalk--normalize-newlines result))))
-            (when src
-              (pharo-smalltalk-capf--cache-store
-               pharo-smalltalk-capf--method-source-cache
-               key src
-               pharo-smalltalk-capf-method-source-cache-max-entries))
-            (funcall k src))))))
-     :params `((class_name . ,class)
-               (method_name . ,selector)
-               (is_class_method . ,(if class-side-p "true" "false"))))))
-
-(defun pharo-smalltalk-capf--fetch-class-comment-async (class-name k)
-  "Asynchronously fetch CLASS-NAME's comment, caching it.
-K is called with the comment string (or nil on failure)."
-  (pharo-smalltalk--request-async
-   "/get-class-comment"
-   (pharo-smalltalk--unwrap-async
-    (lambda (result error)
-      (cond
-       (error
-        (pharo-smalltalk--warn-once
-         (list 'capf-class-comment-async class-name)
-         "async get-class-comment for %s failed: %s" class-name error)
-        (funcall k nil))
-       (t
-        (let ((comment (and result (pharo-smalltalk--normalize-newlines result))))
-          (when comment
-            (pharo-smalltalk-capf--cache-store
-             pharo-smalltalk-capf--class-comment-cache
-             class-name comment
-             pharo-smalltalk-capf-method-source-cache-max-entries))
-          (funcall k comment))))))
-   :params `((class_name . ,class-name))))
+          (puthash query (cons (or result '()) (float-time))
+                   pharo-smalltalk-capf--method-cache)
+          (pharo-smalltalk-capf--cache-prune
+           pharo-smalltalk-capf--method-cache
+           pharo-smalltalk-capf-method-cache-max-entries)))))
+     :params `((method_name_query . ,query)))))
 
 (defun pharo-smalltalk-capf--symbol-bounds ()
   "Return (BEG . END) of the Smalltalk symbol/selector at point."
@@ -308,49 +243,72 @@ on screen until the next move."
       (apply callback args)
     (funcall callback nil)))
 
+(defun pharo-smalltalk-capf--symbol-still-at-point-p (buffer origin-bounds sym)
+  "Non-nil iff BUFFER is live, point is still inside ORIGIN-BOUNDS, and
+the buffer text at ORIGIN-BOUNDS is still SYM.
+Used to discard async eldoc replies after the user moves on or edits."
+  (and (buffer-live-p buffer)
+       (with-current-buffer buffer
+         (let ((beg (car origin-bounds))
+               (end (cdr origin-bounds)))
+           (and (<= end (point-max))
+                (<= beg (point))
+                (<= (point) end)
+                (equal sym (buffer-substring-no-properties beg end)))))))
+
 (defun pharo-smalltalk-capf--eldoc (callback &rest _ignored)
   "`eldoc-documentation-functions' entry for Pharo buffers.
 Returns cached results synchronously when available; otherwise dispatches
-the lookup asynchronously and invokes CALLBACK when the response arrives."
+the lookup asynchronously and invokes CALLBACK when the response arrives.
+Async replies that arrive after the user has moved off the original
+symbol deliver nil to release eldoc without showing stale text."
   (when-let* ((bounds (pharo-smalltalk-capf--symbol-bounds))
-              (sym (buffer-substring-no-properties (car bounds) (cdr bounds))))
-    (cond
-     ;; Class: show first non-empty line of its comment.
-     ((and (> (length sym) 0) (<= ?A (aref sym 0) ?Z))
-      (let ((cached (pharo-smalltalk-capf--cache-lookup
-                     pharo-smalltalk-capf--class-comment-cache sym)))
-        (if cached
-            (pharo-smalltalk-capf--eldoc-deliver
-             callback
-             (pharo-smalltalk-capf--eldoc-class-comment-text sym cached))
-          (pharo-smalltalk-capf--fetch-class-comment-async
-           sym
-           (lambda (comment)
-             (pharo-smalltalk-capf--eldoc-deliver
-              callback
-              (pharo-smalltalk-capf--eldoc-class-comment-text sym comment))))))
-      t)
-     ;; Selector: show first signature line of its source.
-     ((and (> (length sym) 0)
-           (or (string-match-p ":" sym)
-               (<= ?a (aref sym 0) ?z)))
-      (let* ((class (or pharo-smalltalk-buffer-class-name "Object"))
-             (side pharo-smalltalk-buffer-class-side-p)
-             (key (list class sym side))
-             (cached (pharo-smalltalk-capf--cache-lookup
-                      pharo-smalltalk-capf--method-source-cache key)))
-        (if cached
-            (pharo-smalltalk-capf--eldoc-deliver
-             callback
-             (pharo-smalltalk-capf--eldoc-method-text class side sym cached))
-          (pharo-smalltalk-capf--fetch-method-source-async
-           class sym side
-           (lambda (src)
-             (pharo-smalltalk-capf--eldoc-deliver
-              callback
-              (pharo-smalltalk-capf--eldoc-method-text class side sym src))))))
-      t)
-     (t nil))))
+              (sym (buffer-substring-no-properties (car bounds) (cdr bounds)))
+              (origin-buffer (current-buffer))
+              (origin-bounds (cons (car bounds) (cdr bounds))))
+    (cl-flet ((deliver-when-current (args)
+                (pharo-smalltalk-capf--eldoc-deliver
+                 callback
+                 (and (pharo-smalltalk-capf--symbol-still-at-point-p
+                       origin-buffer origin-bounds sym)
+                      args))))
+      (cond
+       ;; Class: show first non-empty line of its comment.
+       ((and (> (length sym) 0) (<= ?A (aref sym 0) ?Z))
+        (let ((cached (pharo-smalltalk--source-cache-lookup
+                       pharo-smalltalk--class-comment-cache sym)))
+          (if cached
+              (pharo-smalltalk-capf--eldoc-deliver
+               callback
+               (pharo-smalltalk-capf--eldoc-class-comment-text sym cached))
+            (pharo-smalltalk-get-class-comment-async
+             sym
+             (lambda (comment)
+               (deliver-when-current
+                (pharo-smalltalk-capf--eldoc-class-comment-text
+                 sym comment))))))
+        t)
+       ;; Selector: show first signature line of its source.
+       ((and (> (length sym) 0)
+             (or (string-match-p ":" sym)
+                 (<= ?a (aref sym 0) ?z)))
+        (let* ((class (or pharo-smalltalk-buffer-class-name "Object"))
+               (side pharo-smalltalk-buffer-class-side-p)
+               (key (list class sym (and side t)))
+               (cached (pharo-smalltalk--source-cache-lookup
+                        pharo-smalltalk--method-source-cache key)))
+          (if cached
+              (pharo-smalltalk-capf--eldoc-deliver
+               callback
+               (pharo-smalltalk-capf--eldoc-method-text class side sym cached))
+            (pharo-smalltalk-get-method-source-async
+             class sym side
+             (lambda (src)
+               (deliver-when-current
+                (pharo-smalltalk-capf--eldoc-method-text
+                 class side sym src))))))
+        t)
+       (t nil)))))
 
 ;;;###autoload
 (defun pharo-smalltalk-capf-install ()

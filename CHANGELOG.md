@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+- **Shared TTL cache for source endpoints**: `pharo-smalltalk-get-class-source`,
+  `pharo-smalltalk-get-method-source`, and `pharo-smalltalk-get-class-comment`
+  now consult shared hash tables (`pharo-smalltalk--class-source-cache`,
+  `--method-source-cache`, `--class-comment-cache`).  xref `M-.`, the
+  browser, and capf/eldoc all warm and read the same cache, so a second
+  jump to the same definition is 0ms.  Cleared on the mutation hook.
+- **Bridge-level async source fetchers** with in-flight dedup:
+  `pharo-smalltalk-get-method-source-async` and `…-class-comment-async`
+  drop duplicate dispatches for the same key while a fetch is pending,
+  delivering the single response to all waiters.
+- **capf prefetch-on-miss** for selector completion: `--methods-like`
+  now returns the cached hit (or nil while a prefetch flies) without
+  blocking the keystroke.  Async prefetch populates the cache so the
+  next keystroke shows results.
+- **Stale-symbol guard** in async eldoc: replies are dropped when point
+  has moved out of the symbol's bounds or the buffer text under those
+  bounds has changed, so a slow class-comment reply won't overwrite the
+  next selector's eldoc text.
+- Drop the now-redundant `pharo-smalltalk-capf--method-source-cache` /
+  `--class-comment-cache` defvars and `--method-source-cache-max-entries`
+  defcustom; capf delegates to the shared bridge cache.
+- ERT 22 → 25: shared-cache hit + invalidate, async in-flight dedup,
+  stale-guard discard.
+
 - **Async eldoc release-on-empty**: when the deferred fetch returns
   nil (unknown class, missing source, server error), the eldoc
   callback is now still invoked with nil to release the eldoc slot.
