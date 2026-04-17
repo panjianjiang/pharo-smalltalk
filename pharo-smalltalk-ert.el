@@ -259,6 +259,17 @@
       (pharo-smalltalk-list-classes "P1")
       (should (= calls 3)))))
 
+(ert-deftest pharo-smalltalk-capf-eldoc-deliver-releases-empty ()
+  "An empty async response must still call eldoc CALLBACK with nil
+so the eldoc machinery doesn't keep showing stale text."
+  (let (received)
+    (pharo-smalltalk-capf--eldoc-deliver
+     (lambda (text &rest _) (push text received)) nil)
+    (pharo-smalltalk-capf--eldoc-deliver
+     (lambda (text &rest _) (push text received))
+     '("hello" :thing "X"))
+    (should (equal received '("hello" nil)))))
+
 (ert-deftest pharo-smalltalk-warn-once-throttles-by-key ()
   (let ((pharo-smalltalk--warn-suppress (make-hash-table :test 'equal))
         (pharo-smalltalk-warn-once-interval 60)

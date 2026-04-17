@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Async eldoc release-on-empty**: when the deferred fetch returns
+  nil (unknown class, missing source, server error), the eldoc
+  callback is now still invoked with nil to release the eldoc slot.
+  Previously the empty case silently skipped the callback, which left
+  stale text on screen until the next cursor move. Adds an ERT.
+
 - **Pharo packaging**: ship `BaselineOfPharoSmalltalkBridge` plus a
   `Sis-Bridge-Extras` Tonel package. Single-line install via
   `Metacello new baseline: 'PharoSmalltalkBridge'; …; load`. The

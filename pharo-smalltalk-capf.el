@@ -298,6 +298,16 @@ class-name / selector search by prefix shape."
           :thing (format "%s%s>>%s" class (if side " class" "") sym)
           :face 'font-lock-function-name-face)))
 
+(defun pharo-smalltalk-capf--eldoc-deliver (callback args)
+  "Invoke CALLBACK with ARGS, or with nil when ARGS is empty.
+Eldoc waits for every deferred function it dispatched.  When our
+async fetch comes back empty (nil source / empty comment) we still
+have to release the slot, otherwise eldoc keeps the previous text
+on screen until the next move."
+  (if args
+      (apply callback args)
+    (funcall callback nil)))
+
 (defun pharo-smalltalk-capf--eldoc (callback &rest _ignored)
   "`eldoc-documentation-functions' entry for Pharo buffers.
 Returns cached results synchronously when available; otherwise dispatches
@@ -310,15 +320,15 @@ the lookup asynchronously and invokes CALLBACK when the response arrives."
       (let ((cached (pharo-smalltalk-capf--cache-lookup
                      pharo-smalltalk-capf--class-comment-cache sym)))
         (if cached
-            (when-let* ((args (pharo-smalltalk-capf--eldoc-class-comment-text
-                              sym cached)))
-              (apply callback args))
+            (pharo-smalltalk-capf--eldoc-deliver
+             callback
+             (pharo-smalltalk-capf--eldoc-class-comment-text sym cached))
           (pharo-smalltalk-capf--fetch-class-comment-async
            sym
            (lambda (comment)
-             (when-let* ((args (pharo-smalltalk-capf--eldoc-class-comment-text
-                               sym comment)))
-               (apply callback args))))))
+             (pharo-smalltalk-capf--eldoc-deliver
+              callback
+              (pharo-smalltalk-capf--eldoc-class-comment-text sym comment))))))
       t)
      ;; Selector: show first signature line of its source.
      ((and (> (length sym) 0)
@@ -330,15 +340,15 @@ the lookup asynchronously and invokes CALLBACK when the response arrives."
              (cached (pharo-smalltalk-capf--cache-lookup
                       pharo-smalltalk-capf--method-source-cache key)))
         (if cached
-            (when-let* ((args (pharo-smalltalk-capf--eldoc-method-text
-                              class side sym cached)))
-              (apply callback args))
+            (pharo-smalltalk-capf--eldoc-deliver
+             callback
+             (pharo-smalltalk-capf--eldoc-method-text class side sym cached))
           (pharo-smalltalk-capf--fetch-method-source-async
            class sym side
            (lambda (src)
-             (when-let* ((args (pharo-smalltalk-capf--eldoc-method-text
-                               class side sym src)))
-               (apply callback args))))))
+             (pharo-smalltalk-capf--eldoc-deliver
+              callback
+              (pharo-smalltalk-capf--eldoc-method-text class side sym src))))))
       t)
      (t nil))))
 
