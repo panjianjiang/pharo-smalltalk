@@ -6,23 +6,15 @@ Class {
 }
 
 { #category : 'private' }
-SisBridgeExtrasTest >> baseUrl [
-	| port |
-	port := SisServer current teapotConfig at: #port ifAbsent: [ 8086 ].
-	^ ('http://localhost:{1}' format: { port }) asUrl
-]
-
-{ #category : 'private' }
-SisBridgeExtrasTest >> ensureServerRunning [
-	(SisServer current teapot isRunning) ifFalse: [ SisServer current start ]
-]
-
-{ #category : 'private' }
-SisBridgeExtrasTest >> post: anUrl dictionary: dict [
-	| json resp |
-	json := NeoJSONWriter toString: dict.
-	resp := ZnEasy post: anUrl data: (ZnEntity json: json).
-	^ NeoJSONReader fromString: resp contents
+SisBridgeExtrasTest >> evalResponseForCode: aString [
+	| request |
+	request := SisBridgeExtrasTestRequest
+		withJson:
+			(NeoJSONWriter toString:
+				(Dictionary new
+					at: #code put: aString;
+					yourself)).
+	^ SisServer current handleEval: request
 ]
 
 { #category : 'tests' }
@@ -34,21 +26,25 @@ SisBridgeExtrasTest >> testAssociationSerializesAsOneEntryMap [
 
 { #category : 'tests' }
 SisBridgeExtrasTest >> testEvalReturnsTranscriptPayload [
-	| url resp |
-	self ensureServerRunning.
-	url := self baseUrl / 'eval'.
-	resp := self
-		post: url
-		dictionary: { ('code' -> 'Transcript show: ''bridge''; cr. 1 + 2') }
-				asDictionary.
+	| resp |
+	resp := self evalResponseForCode: 'Transcript show: ''bridge''; cr. 1 + 2'.
 	self assert: (resp at: #success).
 	self assert: (resp at: #result) equals: 3.
 	self assert: ((resp at: #transcript) includesSubstring: 'bridge')
 ]
 
 { #category : 'tests' }
+SisBridgeExtrasTest >> testEvalReturnsTranscriptPayloadOnFailure [
+	| resp |
+	resp := self
+		evalResponseForCode: 'Transcript show: ''boom''; cr. Error signal: ''kapow'''.
+	self deny: (resp at: #success).
+	self assert: ((resp at: #transcript) includesSubstring: 'boom')
+]
+
+{ #category : 'tests' }
 SisBridgeExtrasTest >> testTranscriptSerializesAsPrintString [
-	| json |
-	json := NeoJSONWriter toString: Transcript.
-	self assert: (json includesSubstring: 'StThreadSafeTranscript')
+	self
+		assert: (NeoJSONWriter toString: Transcript)
+		equals: '"a StThreadSafeTranscript"'
 ]

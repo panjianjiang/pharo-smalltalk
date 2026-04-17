@@ -21,7 +21,7 @@ small additions on top of upstream
 | `BaselineOfPharoSmalltalkBridge/` | Metacello baseline; depends on upstream + loads `Sis-Bridge-Extras`. |
 | `Sis-Bridge-Extras/` | Tonel package containing the two NeoJSON extensions plus the `SisServer` override. |
 | `Sis-Bridge-Extras-Tests/` | Optional integration tests for Transcript capture and serialization. |
-| `install.st` | Legacy runtime installer kept as a fallback. |
+| `install.st` | Local bootstrap script that loads the Tonel sources via Metacello. |
 
 ## Recommended install — Metacello
 
@@ -58,18 +58,22 @@ Metacello new
 
 ## Fallback install — install.st
 
-If you already maintain a fork of `PharoSmalltalkInteropServer`
-through Iceberg and don't want to add another Metacello dependency,
-run the legacy script in any Playground:
+If you already have this repository checked out locally and want to
+load from disk instead of GitHub, point the bootstrap script at the
+local `pharo/` directory and evaluate it in a Playground:
 
 ```smalltalk
+Smalltalk globals
+    at: #PharoSmalltalkBridgeInstallDirectory
+    put: '/path/to/pharo-smalltalk/pharo' asFileReference.
 Smalltalk compiler evaluate:
-    '/path/to/pharo-smalltalk/pharo/install.st' asFileReference contents.
+    ('/path/to/pharo-smalltalk/pharo/install.st' asFileReference contents).
 SisServer restart.
 ```
 
-`install.st` compiles the same four methods directly into the running
-image. It is path-agnostic and idempotent.
+`install.st` delegates to the same local Tonel sources via Metacello
+and only loads `Sis-Bridge-Extras`, assuming upstream
+`PharoSmalltalkInteropServer` is already present in the image.
 
 ## Verification
 
@@ -86,4 +90,5 @@ output appears inline:
 Transcript crShow: 'hello from Pharo'. 1 + 2
 ```
 
-For Pharo-side regression coverage, run `SisBridgeExtrasTest`.
+For Pharo-side regression coverage, run `SisBridgeExtrasTest`, including
+the failure-path `/eval` case that should still retain Transcript output.

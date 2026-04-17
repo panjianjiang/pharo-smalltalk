@@ -210,9 +210,11 @@ All are under the `pharo-smalltalk` customize group.
 
 ## Troubleshooting
 
-- **HTTP 500 `NeoJSONMappingNotFound`** — you haven't applied
-  `pharo/install.st` (or loaded `Sis-Bridge-Extras`). Without the
-  extra `neoJsonOn:` methods, evaluating values such as `Transcript`
+- **HTTP 500 `NeoJSONMappingNotFound`** — you haven't loaded
+  `Sis-Bridge-Extras` yet. Install via the baseline, or use the local
+  bootstrap in `pharo/install.st` after setting
+  `PharoSmalltalkBridgeInstallDirectory`. Without the extra
+  `neoJsonOn:` methods, evaluating values such as `Transcript`
   or `Association` can fail to serialize.
 - **Transcript output missing from Emacs result** — same fix: the
   patched `handleEval:` is what surfaces Transcript text in the
