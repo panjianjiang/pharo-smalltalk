@@ -74,8 +74,8 @@
     (`(packages) (pharo-smalltalk-browser--render-packages))
     (`(classes ,pkg) (pharo-smalltalk-browser--render-classes pkg))
     (`(methods ,class ,side) (pharo-smalltalk-browser--render-methods class side))
-    (`(source ,class ,selector ,side)
-     (pharo-smalltalk-browser--render-source class selector side))
+    (`(source ,class ,selector ,side ,category)
+     (pharo-smalltalk-browser--render-source class selector side category))
     (_ (user-error "Unknown browser view spec: %S" spec))))
 
 (defun pharo-smalltalk-browser--render-packages ()
@@ -156,7 +156,7 @@
                   (or category pharo-smalltalk-default-method-category))
       (goto-char (point-min))
       (setq pharo-smalltalk-browser--current
-            `(source ,class ,selector ,side))
+            `(source ,class ,selector ,side ,category))
       (setq header-line-format
             (format " %s%s>>%s   u=back to method list"
                     class (if class-side-p " class" "") selector))

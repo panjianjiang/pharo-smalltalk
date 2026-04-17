@@ -239,7 +239,9 @@
              "DemoClass" "value" 'instance "accessing")
             (with-current-buffer pharo-smalltalk-browser-buffer-name
               (should (equal pharo-smalltalk-buffer-method-category
-                             "accessing"))))
+                             "accessing"))
+              (should (equal pharo-smalltalk-browser--current
+                             '(source "DemoClass" "value" instance "accessing")))))
         (when (get-buffer pharo-smalltalk-browser-buffer-name)
           (kill-buffer pharo-smalltalk-browser-buffer-name))))))
 
@@ -352,6 +354,26 @@ call and deliver the same result to both waiters."
       (funcall captured-cb '((success . t) (result . "m ^ 7")) nil)
       (should (equal (sort (mapcar #'car received) #'string<) '(:a :b)))
       (should (cl-every (lambda (e) (equal (cdr e) "m ^ 7")) received)))))
+
+(ert-deftest pharo-smalltalk-get-class-comment-async-dedups-in-flight ()
+  "Two overlapping async comment fetches should collapse to one HTTP call."
+  (let ((pharo-smalltalk--class-comment-cache (make-hash-table :test 'equal))
+        (pharo-smalltalk--in-flight-source nil)
+        (dispatched 0)
+        (received nil)
+        captured-cb)
+    (cl-letf (((symbol-function 'pharo-smalltalk--request-async)
+               (lambda (_ep cb &rest _)
+                 (cl-incf dispatched)
+                 (setq captured-cb cb))))
+      (pharo-smalltalk-get-class-comment-async
+       "C" (lambda (s) (push (cons :a s) received)))
+      (pharo-smalltalk-get-class-comment-async
+       "C" (lambda (s) (push (cons :b s) received)))
+      (should (= dispatched 1))
+      (funcall captured-cb '((success . t) (result . "A comment")) nil)
+      (should (equal (sort (mapcar #'car received) #'string<) '(:a :b)))
+      (should (cl-every (lambda (e) (equal (cdr e) "A comment")) received)))))
 
 (ert-deftest pharo-smalltalk-capf-eldoc-stale-guard-discards-old-replies ()
   "Stale guard returns nil after point moves out of the original

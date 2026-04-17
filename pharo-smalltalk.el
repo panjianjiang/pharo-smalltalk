@@ -741,29 +741,29 @@ With FORCE, bypass the cache."
 
 (defun pharo-smalltalk-get-class-source (class-name)
   "Return the full source of CLASS-NAME, cached for TTL."
-  (or (pharo-smalltalk--source-cache-lookup
-       pharo-smalltalk--class-source-cache class-name)
-      (pharo-smalltalk--source-cache-store
-       pharo-smalltalk--class-source-cache class-name
-       (pharo-smalltalk--normalize-newlines
-        (pharo-smalltalk--result
-         (pharo-smalltalk--request "/get-class-source"
-                                   :params `((class_name . ,class-name))))))))
+  (pharo-smalltalk--cached-source-value
+   pharo-smalltalk--class-source-cache
+   class-name
+   (lambda ()
+     (pharo-smalltalk--normalize-newlines
+      (pharo-smalltalk--result
+       (pharo-smalltalk--request "/get-class-source"
+                                 :params `((class_name . ,class-name))))))))
 
 (defun pharo-smalltalk-get-method-source (class-name method-name &optional class-side-p)
   "Return source for METHOD-NAME on CLASS-NAME, cached for TTL.
 When CLASS-SIDE-P is non-nil, fetch the class-side method."
   (let ((key (list class-name method-name (and class-side-p t))))
-    (or (pharo-smalltalk--source-cache-lookup
-         pharo-smalltalk--method-source-cache key)
-        (pharo-smalltalk--source-cache-store
-         pharo-smalltalk--method-source-cache key
-         (pharo-smalltalk--normalize-newlines
-          (pharo-smalltalk--result
-           (pharo-smalltalk--request "/get-method-source"
-                                     :params `((class_name . ,class-name)
-                                               (method_name . ,method-name)
-                                               (is_class_method . ,(if class-side-p "true" "false"))))))))))
+    (pharo-smalltalk--cached-source-value
+     pharo-smalltalk--method-source-cache
+     key
+     (lambda ()
+       (pharo-smalltalk--normalize-newlines
+        (pharo-smalltalk--result
+         (pharo-smalltalk--request "/get-method-source"
+                                   :params `((class_name . ,class-name)
+                                             (method_name . ,method-name)
+                                             (is_class_method . ,(if class-side-p "true" "false"))))))))))
 
 (defun pharo-smalltalk-search-implementors (selector)
   "Search Pharo implementors for SELECTOR."
@@ -839,14 +839,14 @@ When CLASS-SIDE-P is non-nil, fetch the class-side method."
 
 (defun pharo-smalltalk-get-class-comment (class-name)
   "Return the comment of CLASS-NAME, cached for TTL."
-  (or (pharo-smalltalk--source-cache-lookup
-       pharo-smalltalk--class-comment-cache class-name)
-      (pharo-smalltalk--source-cache-store
-       pharo-smalltalk--class-comment-cache class-name
-       (pharo-smalltalk--normalize-newlines
-        (pharo-smalltalk--result
-         (pharo-smalltalk--request "/get-class-comment"
-                                   :params `((class_name . ,class-name))))))))
+  (pharo-smalltalk--cached-source-value
+   pharo-smalltalk--class-comment-cache
+   class-name
+   (lambda ()
+     (pharo-smalltalk--normalize-newlines
+      (pharo-smalltalk--result
+       (pharo-smalltalk--request "/get-class-comment"
+                                 :params `((class_name . ,class-name))))))))
 
 (defvar pharo-smalltalk--in-flight-source nil
   "Hash of in-flight async source-fetch keys, to suppress duplicate dispatches.")
@@ -862,69 +862,31 @@ When CLASS-SIDE-P is non-nil, fetch the class-side method."
 Calls K with the source string (or nil on failure).  Hits the shared
 source cache on success; warns once on error."
   (let* ((key (list class-name method-name (and class-side-p t)))
-         (in-flight (pharo-smalltalk--in-flight-table))
-         (cached (pharo-smalltalk--source-cache-lookup
-                  pharo-smalltalk--method-source-cache key)))
-    (cond
-     (cached (funcall k cached))
-     ((gethash key in-flight)
-      (push k (gethash key in-flight)))
-     (t
-      (puthash key (list k) in-flight)
-      (pharo-smalltalk--request-async
-       "/get-method-source"
-       (pharo-smalltalk--unwrap-async
-        (lambda (result error)
-          (let ((waiters (gethash key in-flight))
-                (value (and (not error) result
-                            (pharo-smalltalk--normalize-newlines result))))
-            (remhash key in-flight)
-            (when value
-              (pharo-smalltalk--source-cache-store
-               pharo-smalltalk--method-source-cache key value))
-            (when error
-              (pharo-smalltalk--warn-once
-               (list 'method-source-async class-name)
-               "async get-method-source for %s>>%s failed: %s"
-               class-name method-name error))
-            (dolist (waiter (nreverse waiters))
-              (funcall waiter value)))))
-       :params `((class_name . ,class-name)
-                 (method_name . ,method-name)
-                 (is_class_method . ,(if class-side-p "true" "false"))))))))
+         (params `((class_name . ,class-name)
+                   (method_name . ,method-name)
+                   (is_class_method . ,(if class-side-p "true" "false")))))
+    (pharo-smalltalk--fetch-cached-source-async
+     key
+     pharo-smalltalk--method-source-cache
+     "/get-method-source"
+     params
+     k
+     (list 'method-source-async class-name class-side-p method-name)
+     (format "async get-method-source for %s>>%s failed: %%s"
+             class-name method-name))))
 
 (defun pharo-smalltalk-get-class-comment-async (class-name k)
   "Fetch CLASS-NAME comment asynchronously, caching it.
 Calls K with the comment string (or nil on failure)."
-  (let* ((in-flight (pharo-smalltalk--in-flight-table))
-         (cached (pharo-smalltalk--source-cache-lookup
-                  pharo-smalltalk--class-comment-cache class-name))
-         (key (list 'comment class-name)))
-    (cond
-     (cached (funcall k cached))
-     ((gethash key in-flight)
-      (push k (gethash key in-flight)))
-     (t
-      (puthash key (list k) in-flight)
-      (pharo-smalltalk--request-async
-       "/get-class-comment"
-       (pharo-smalltalk--unwrap-async
-        (lambda (result error)
-          (let ((waiters (gethash key in-flight))
-                (value (and (not error) result
-                            (pharo-smalltalk--normalize-newlines result))))
-            (remhash key in-flight)
-            (when value
-              (pharo-smalltalk--source-cache-store
-               pharo-smalltalk--class-comment-cache class-name value))
-            (when error
-              (pharo-smalltalk--warn-once
-               (list 'class-comment-async class-name)
-               "async get-class-comment for %s failed: %s"
-               class-name error))
-            (dolist (waiter (nreverse waiters))
-              (funcall waiter value)))))
-       :params `((class_name . ,class-name)))))))
+  (let ((key (list 'comment class-name)))
+    (pharo-smalltalk--fetch-cached-source-async
+     key
+     pharo-smalltalk--class-comment-cache
+     "/get-class-comment"
+     `((class_name . ,class-name))
+     k
+     (list 'class-comment-async class-name)
+     (format "async get-class-comment for %s failed: %%s" class-name))))
 
 (defun pharo-smalltalk-show-class-comment (class-name)
   "Show comment of CLASS-NAME in a buffer."
@@ -1326,6 +1288,41 @@ here and invalidate themselves.")
   "Store VALUE under KEY in TABLE with the current timestamp."
   (puthash key (cons value (float-time)) table)
   value)
+
+(defun pharo-smalltalk--cached-source-value (table key fetcher)
+  "Return cached value from TABLE for KEY, or compute it with FETCHER.
+FETCHER is only run on cache miss or expiry."
+  (or (pharo-smalltalk--source-cache-lookup table key)
+      (pharo-smalltalk--source-cache-store table key (funcall fetcher))))
+
+(defun pharo-smalltalk--fetch-cached-source-async (key table endpoint params k warn-key warn-format)
+  "Fetch a cached source-like value asynchronously and deliver it to K.
+KEY and TABLE select the shared cache entry.  ENDPOINT and PARAMS are
+forwarded to `pharo-smalltalk--request-async'.  WARN-KEY and WARN-FORMAT
+control the warning emitted on async failure."
+  (let* ((in-flight (pharo-smalltalk--in-flight-table))
+         (cached (pharo-smalltalk--source-cache-lookup table key)))
+    (cond
+     (cached (funcall k cached))
+     ((gethash key in-flight)
+      (push k (gethash key in-flight)))
+     (t
+      (puthash key (list k) in-flight)
+      (pharo-smalltalk--request-async
+       endpoint
+       (pharo-smalltalk--unwrap-async
+        (lambda (result error)
+          (let ((waiters (gethash key in-flight))
+                (value (and (not error) result
+                            (pharo-smalltalk--normalize-newlines result))))
+            (remhash key in-flight)
+            (when value
+              (pharo-smalltalk--source-cache-store table key value))
+            (when error
+              (pharo-smalltalk--warn-once warn-key warn-format error))
+            (dolist (waiter (nreverse waiters))
+              (funcall waiter value)))))
+       :params params)))))
 
 (add-hook 'pharo-smalltalk-after-mutation-hook
           #'pharo-smalltalk--invalidate-browser-caches)
