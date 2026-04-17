@@ -118,6 +118,7 @@ With the default `C-c s` prefix:
 | `C-c s v` | `pharo-smalltalk-show-screen` (World screenshot + structure) |
 | `C-c s j` | `pharo-smalltalk-inspect-expression` (live object inspector) |
 | `C-c s J` | inspect the class name at point |
+| `C-c s l` | inspect the last eval result (captured by `C-c s e`) |
 | `C-c s P` | `pharo-smalltalk-ping` |
 | `C-c s t c/p/s/r` | run test class / package / smoke / re-run |
 

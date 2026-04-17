@@ -3,13 +3,17 @@ Extension { #name : 'SisServer' }
 { #category : '*Sis-Bridge-Extras' }
 SisServer >> handleEval: request [
 	"Override of upstream Sis-Core handleEval: that also captures
-	Transcript output produced during evaluation. Returns the dict
-	with `result', `transcript', `success' (and `error' on failure)."
-	| resultDict requestJson code transcript error |
+	Transcript output produced during evaluation and optionally
+	attaches a SisInspector tree for the result. Returns the dict
+	with `result', `transcript', `success' (and `error' on failure).
+	When the `inspect' query param is truthy, `result_tree' is added
+	so callers can drill into the result without re-evaluating."
+	| resultDict requestJson code transcript error inspect |
 	resultDict := Dictionary new.
 	resultDict at: 'success' put: false.
 	requestJson := NeoJSONReader fromString: request entity contents.
 	code := requestJson at: #code.
+	inspect := self inspectFlagFromRequest: request.
 	error := nil.
 	transcript := self transcriptCapturedDuring: [
 		[ resultDict at: 'result' put: (self class compiler evaluate: code) ]
@@ -17,8 +21,22 @@ SisServer >> handleEval: request [
 			do: [ :ex | error := ex ] ].
 	resultDict at: 'transcript' put: transcript.
 	error ifNotNil: [ ^ self returnError: error by: resultDict ].
+	inspect ifTrue: [
+		| value |
+		value := resultDict at: 'result' ifAbsent: [ nil ].
+		((Smalltalk globals includesKey: #SisInspector) and: [ value notNil ])
+			ifTrue: [
+				resultDict at: 'result_tree' put: (SisInspector renderTreeOf: value) ] ].
 	resultDict at: 'success' put: true.
 	^ resultDict
+]
+
+{ #category : '*Sis-Bridge-Extras' }
+SisServer >> inspectFlagFromRequest: request [
+	"Read the optional `inspect' query param; default false."
+	| raw |
+	raw := request at: #inspect ifAbsent: [ 'false' ].
+	^ raw asString asLowercase = 'true'
 ]
 
 { #category : '*Sis-Bridge-Extras' }

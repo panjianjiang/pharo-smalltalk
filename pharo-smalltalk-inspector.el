@@ -195,6 +195,18 @@ current ref in place."
    t expression))
 
 ;;;###autoload
+(defun pharo-smalltalk-inspect-last-result ()
+  "Open the inspector on the server-side tree for the most recent eval.
+Requires that the last eval went through with `:inspect' truthy (for
+example via `pharo-smalltalk-eval-region-or-line').  Refresh/back/drill
+work as normal; the root can be refreshed because its ref is still
+registered server-side."
+  (interactive)
+  (unless (bound-and-true-p pharo-smalltalk-last-result-tree)
+    (user-error "No inspectable result captured — evaluate a line with C-c s e first"))
+  (pharo-smalltalk-inspector--open pharo-smalltalk-last-result-tree t nil))
+
+;;;###autoload
 (defun pharo-smalltalk-inspect-class-at-point-with-inspector ()
   "Inspect the class named at point by instantiating it with `new'."
   (interactive)

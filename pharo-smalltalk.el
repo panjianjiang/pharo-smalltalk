@@ -114,6 +114,10 @@ Set to nil to leave the command map unbound globally."
 (defvar pharo-smalltalk-last-transcript nil
   "Last captured Transcript output from the server, or nil if empty.")
 
+(defvar pharo-smalltalk-last-result-tree nil
+  "Last SisInspector tree returned by an eval made with `:inspect' truthy,
+or nil when the server wasn't asked to inspect the last result.")
+
 (defvar pharo-smalltalk-last-http-status nil
   "Last HTTP status code returned by the server.")
 
@@ -136,6 +140,7 @@ Set to nil to leave the command map unbound globally."
 (autoload 'pharo-smalltalk-inspect-expression "pharo-smalltalk-inspector" nil t)
 (autoload 'pharo-smalltalk-inspect-class-at-point-with-inspector
   "pharo-smalltalk-inspector" nil t)
+(autoload 'pharo-smalltalk-inspect-last-result "pharo-smalltalk-inspector" nil t)
 
 (defvar pharo-smalltalk-command-map
   (let ((map (make-sparse-keymap)))
@@ -640,9 +645,13 @@ otherwise pass a naive truthiness check."
     (and s (not (eq s :json-false)) (not (eq s :false)))))
 
 (defun pharo-smalltalk--result (response)
-  "Return RESPONSE result or raise a user-facing error."
+  "Return RESPONSE result or raise a user-facing error.
+Refreshes `pharo-smalltalk-last-result-tree' — either with the
+server-provided `result_tree' when present, or cleared to nil when
+the server didn't produce one for this call."
   (setq pharo-smalltalk-last-response response)
   (pharo-smalltalk--extract-transcript response)
+  (setq pharo-smalltalk-last-result-tree (alist-get 'result_tree response))
   (if (pharo-smalltalk--success-p response)
       (let ((result (alist-get 'result response)))
         (setq pharo-smalltalk-last-result result)
@@ -674,12 +683,17 @@ concurrent searches don't clobber each other."
         (pharo-smalltalk--display-value "Error" error-value buffer)
         (error "Pharo %s failed: %s" action-name (pharo-smalltalk--format-error error-value))))))
 
-(defun pharo-smalltalk-eval (code)
-  "Evaluate CODE through the Pharo server and return the result."
+(cl-defun pharo-smalltalk-eval (code &key inspect)
+  "Evaluate CODE through the Pharo server and return the result.
+When INSPECT is non-nil, ask the server to also return a SisInspector
+tree of the result; it's stashed in `pharo-smalltalk-last-result-tree'
+for `pharo-smalltalk-inspect-last-result'."
   (pharo-smalltalk--result
    (pharo-smalltalk--request "/eval"
                              :type "POST"
-                             :data `((code . ,code)))))
+                             :data `((code . ,code))
+                             :params (when inspect
+                                       '((inspect . "true"))))))
 
 (defun pharo-smalltalk-eval-and-display (code)
   "Evaluate CODE and display the result buffer."
@@ -732,13 +746,15 @@ concurrent searches don't clobber each other."
 
 (defun pharo-smalltalk-eval-region-or-line ()
   "Evaluate the active region, or the current line when no region is active.
-When the server captures Transcript output, prepend it to the echoed message."
+When the server captures Transcript output, prepend it to the echoed message.
+Always asks the server to inspect the result so
+`pharo-smalltalk-inspect-last-result' can drill into it."
   (interactive)
   (let* ((code (if (use-region-p)
                    (buffer-substring-no-properties (region-beginning) (region-end))
                  (buffer-substring-no-properties (line-beginning-position)
                                                  (line-end-position))))
-         (result (pharo-smalltalk-eval code)))
+         (result (pharo-smalltalk-eval code :inspect t)))
     (if pharo-smalltalk-last-transcript
         (message "%s %s"
                  (string-trim-right pharo-smalltalk-last-transcript)
@@ -1825,6 +1841,7 @@ With prefix argument NEW-BUFFER, create a fresh workspace buffer."
 (define-key pharo-smalltalk-command-map (kbd "v") #'pharo-smalltalk-show-screen)
 (define-key pharo-smalltalk-command-map (kbd "j") #'pharo-smalltalk-inspect-expression)
 (define-key pharo-smalltalk-command-map (kbd "J") #'pharo-smalltalk-inspect-class-at-point-with-inspector)
+(define-key pharo-smalltalk-command-map (kbd "l") #'pharo-smalltalk-inspect-last-result)
 (defvar pharo-smalltalk-test-map
   (make-sparse-keymap)
   "Prefix keymap for Pharo Smalltalk test commands.")

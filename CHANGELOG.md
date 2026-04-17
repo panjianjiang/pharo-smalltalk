@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- **Inspectable eval results**: `/eval` now takes an `inspect=true`
+  query parameter.  When set, the response carries a `result_tree`
+  field built with `SisInspector renderTreeOf:`, so callers can drill
+  into the result without re-evaluating.  `pharo-smalltalk-eval' grew
+  an `:inspect' keyword; `--result' stashes the tree in
+  `pharo-smalltalk-last-result-tree' (and clears it when the current
+  call didn't produce one).  `pharo-smalltalk-eval-region-or-line'
+  opts in by default.  New command
+  `pharo-smalltalk-inspect-last-result' (bound to `C-c s l`) opens
+  the stash in the inspector.  Eval a line → `C-c s l` → drill-down.
+- **Pharo tests**: +3 covering no-result-tree by default, result-tree
+  when `inspect=true`, and explicit `inspect=false` still suppresses.
+  Test-request stub now supports query params.
+- **Emacs tests**: +2 covering `--result` refreshing the tree stash
+  and `pharo-smalltalk-eval' only passing `inspect=true' when asked.
+
 - **Live object inspector**: new `pharo-smalltalk-inspect-expression`
   (bound to `C-c s j`) opens an interactive buffer on the result of an
   arbitrary Smalltalk expression.  Shows class, print string,

@@ -534,6 +534,34 @@ line so navigation can recover the ref for drill-down."
     (let ((row (get-text-property (point) 'pharo-smalltalk-inspector-row)))
       (should (equal (alist-get 'ref row) 6)))))
 
+(ert-deftest pharo-smalltalk-result-captures-result-tree ()
+  "`--result' refreshes `last-result-tree' from the server response."
+  (let ((pharo-smalltalk-last-result-tree 'stale)
+        (pharo-smalltalk-last-response nil)
+        (pharo-smalltalk-last-result nil))
+    (pharo-smalltalk--result
+     '((success . t) (result . 3)
+       (result_tree . ((ref . 1) (class . "SmallInteger") (print . "3")))))
+    (should (equal (alist-get 'ref pharo-smalltalk-last-result-tree) 1))
+    (should (equal (alist-get 'class pharo-smalltalk-last-result-tree)
+                   "SmallInteger"))
+    ;; A subsequent call without result_tree clears the stash.
+    (pharo-smalltalk--result '((success . t) (result . 7)))
+    (should-not pharo-smalltalk-last-result-tree)))
+
+(ert-deftest pharo-smalltalk-eval-passes-inspect-param ()
+  "`pharo-smalltalk-eval' only adds inspect=true when the keyword is set."
+  (let (captured)
+    (cl-letf (((symbol-function 'pharo-smalltalk--request)
+               (lambda (_endpoint &rest kwargs)
+                 (setq captured kwargs)
+                 '((success . t) (result . 1)))))
+      (pharo-smalltalk-eval "1")
+      (should-not (plist-get captured :params))
+      (pharo-smalltalk-eval "1" :inspect t)
+      (should (equal (plist-get captured :params)
+                     '((inspect . "true")))))))
+
 (ert-deftest pharo-smalltalk-inspector-drill-pushes-stack ()
   "Drilling from one view stashes the previous tree on the back stack."
   (with-temp-buffer
