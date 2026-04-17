@@ -1061,6 +1061,74 @@ When CLASS-SIDE-P is non-nil, fetch the class-side method."
    `((status . ,pharo-smalltalk-last-http-status)
      (body . ,pharo-smalltalk-last-raw-body))))
 
+(defcustom pharo-smalltalk-screenshot-viewer 'auto
+  "How `pharo-smalltalk-show-screen' displays the captured PNG.
+Options:
+ - `auto' (default) — `image-mode' buffer on GUI frames, otherwise
+   fall back to `xdg-open' / `open' when available.
+ - `buffer' — always open in an `image-mode' buffer (fine on GUI,
+   shows an unrenderable placeholder on TUI).
+ - a string — treated as a shell command; the PNG path is appended
+   as the final argument.  For terminal image protocols, e.g.
+   \"kitty +kitten icat\", \"wezterm imgcat\", \"imgcat\" (iTerm2)."
+  :type '(choice (const :tag "Auto" auto)
+                 (const :tag "Always Emacs image-mode buffer" buffer)
+                 (string :tag "External command"))
+  :group 'pharo-smalltalk)
+
+(defun pharo-smalltalk--pick-screenshot-strategy ()
+  "Resolve `pharo-smalltalk-screenshot-viewer' to a concrete strategy.
+Returns either `buffer' or a list (COMMAND &rest ARGS)."
+  (pcase pharo-smalltalk-screenshot-viewer
+    ('buffer 'buffer)
+    ((pred stringp)
+     (split-string-shell-command pharo-smalltalk-screenshot-viewer))
+    ('auto
+     (cond
+      ((display-graphic-p) 'buffer)
+      ((executable-find "xdg-open") (list "xdg-open"))
+      ((executable-find "open") (list "open"))
+      (t 'buffer)))
+    (_ 'buffer)))
+
+(defun pharo-smalltalk--display-screenshot (path)
+  "Display PNG at PATH per `pharo-smalltalk-screenshot-viewer'."
+  (let ((strategy (pharo-smalltalk--pick-screenshot-strategy)))
+    (pcase strategy
+      ('buffer
+       (let ((buf (find-file-noselect path)))
+         (pop-to-buffer buf)
+         buf))
+      ((pred listp)
+       (apply #'start-process "pharo-screenshot" nil
+              (car strategy) (append (cdr strategy) (list path)))
+       (message "Opened %s via %s"
+                path (mapconcat #'identity strategy " "))
+       path))))
+
+;;;###autoload
+(defun pharo-smalltalk-show-screen (&optional target-type)
+  "Capture and display the current Pharo UI screenshot.
+TARGET-TYPE is \"world\" (default), \"spec\", or \"roassal\".  With a
+prefix argument prompt for it.  Display method is controlled by
+`pharo-smalltalk-screenshot-viewer'.  Returns the parsed structure
+alist (screenshot path + summary + structure)."
+  (interactive
+   (list (if current-prefix-arg
+             (completing-read "Target: " '("world" "spec" "roassal")
+                              nil t nil nil "world")
+           "world")))
+  (let* ((result (pharo-smalltalk--result
+                  (pharo-smalltalk--request
+                   "/read-screen"
+                   :params `((target_type . ,(or target-type "world"))
+                             (capture_screenshot . "true")))))
+         (path (alist-get 'screenshot result))
+         (summary (alist-get 'summary result)))
+    (when path (pharo-smalltalk--display-screenshot path))
+    (when summary (message "Pharo %s — %s" (or target-type "world") summary))
+    result))
+
 (defun pharo-smalltalk--class-definition (class-name)
   "Extract the class definition portion for CLASS-NAME."
   (let ((source (pharo-smalltalk-get-class-source class-name)))
@@ -1744,6 +1812,7 @@ With prefix argument NEW-BUFFER, create a fresh workspace buffer."
 (define-key pharo-smalltalk-command-map (kbd "T") #'pharo-smalltalk-search-traits-like-display)
 (define-key pharo-smalltalk-command-map (kbd "D") #'pharo-smalltalk-show-class-comment)
 (define-key pharo-smalltalk-command-map (kbd "x") #'pharo-smalltalk-export-package)
+(define-key pharo-smalltalk-command-map (kbd "v") #'pharo-smalltalk-show-screen)
 (defvar pharo-smalltalk-test-map
   (make-sparse-keymap)
   "Prefix keymap for Pharo Smalltalk test commands.")

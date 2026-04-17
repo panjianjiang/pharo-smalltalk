@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **Screenshot command**: new `pharo-smalltalk-show-screen' (bound to
+  `C-c s v') wraps the server `/read-screen' endpoint.  Captures a
+  PNG of the Pharo World (or `spec' / `roassal' with a prefix arg)
+  and displays it per `pharo-smalltalk-screenshot-viewer': `auto'
+  picks an `image-mode' buffer on GUI frames and `xdg-open' /
+  `open' on TUI; a string value is treated as a shell command so
+  terminal image protocols (`kitty +kitten icat', `wezterm imgcat',
+  `imgcat') plug in directly.  Returns the structured response
+  (summary + morph/presenter/canvas tree) to the caller.
+
 - **Shared TTL cache for source endpoints**: `pharo-smalltalk-get-class-source`,
   `pharo-smalltalk-get-method-source`, and `pharo-smalltalk-get-class-comment`
   now consult shared hash tables (`pharo-smalltalk--class-source-cache`,

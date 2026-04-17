@@ -115,6 +115,7 @@ With the default `C-c s` prefix:
 | `C-c s C` / `M` / `T` | search classes / methods / traits like… |
 | `C-c s D` | `pharo-smalltalk-show-class-comment` |
 | `C-c s x` / `i` | export / import Tonel package |
+| `C-c s v` | `pharo-smalltalk-show-screen` (World screenshot + structure) |
 | `C-c s P` | `pharo-smalltalk-ping` |
 | `C-c s t c/p/s/r` | run test class / package / smoke / re-run |
 
@@ -213,6 +214,7 @@ block.
 | `pharo-smalltalk-indent-offset` | `2` | indent step |
 | `pharo-smalltalk-class-cache-ttl` | `30` | class-name cache TTL (seconds) |
 | `pharo-smalltalk-capf-cache-ttl` | `15` | completion/query cache TTL (seconds) |
+| `pharo-smalltalk-screenshot-viewer` | `auto` | how `pharo-smalltalk-show-screen' renders the PNG: `auto' (GUI → `image-mode' buffer, TUI → `xdg-open'/`open'), `buffer', or a shell command string |
 
 All are under the `pharo-smalltalk` customize group.
 

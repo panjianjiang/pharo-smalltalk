@@ -462,6 +462,37 @@ symbol's bounds, or when the text under the bounds has changed."
       (should-not (pharo-smalltalk-capf--symbol-still-at-point-p
                    origin-buffer origin-bounds "OrderedCollection")))))
 
+(ert-deftest pharo-smalltalk-screenshot-strategy-respects-override ()
+  "An explicit string viewer becomes a shell argv list; `buffer' stays
+  `buffer'; `auto' picks `buffer' on GUI and xdg-open/open otherwise."
+  (let ((pharo-smalltalk-screenshot-viewer "kitty +kitten icat"))
+    (should (equal (pharo-smalltalk--pick-screenshot-strategy)
+                   '("kitty" "+kitten" "icat"))))
+  (let ((pharo-smalltalk-screenshot-viewer 'buffer))
+    (should (eq (pharo-smalltalk--pick-screenshot-strategy) 'buffer)))
+  (let ((pharo-smalltalk-screenshot-viewer 'auto))
+    (cl-letf (((symbol-function 'display-graphic-p) (lambda () t)))
+      (should (eq (pharo-smalltalk--pick-screenshot-strategy) 'buffer)))
+    (cl-letf (((symbol-function 'display-graphic-p) (lambda () nil))
+              ((symbol-function 'executable-find)
+               (lambda (name) (when (equal name "xdg-open") "/usr/bin/xdg-open"))))
+      (should (equal (pharo-smalltalk--pick-screenshot-strategy)
+                     '("xdg-open"))))
+    (cl-letf (((symbol-function 'display-graphic-p) (lambda () nil))
+              ((symbol-function 'executable-find) (lambda (_) nil)))
+      (should (eq (pharo-smalltalk--pick-screenshot-strategy) 'buffer)))))
+
+(ert-deftest pharo-smalltalk-show-screen-dispatches-external-cmd ()
+  "When the viewer is a shell command, `--display-screenshot' spawns it
+  and does not open a buffer."
+  (let ((pharo-smalltalk-screenshot-viewer "imgcat")
+        invoked)
+    (cl-letf (((symbol-function 'start-process)
+               (lambda (_name _buf program &rest args)
+                 (setq invoked (cons program args)))))
+      (pharo-smalltalk--display-screenshot "/tmp/fake.png")
+      (should (equal invoked '("imgcat" "/tmp/fake.png"))))))
+
 (ert-deftest pharo-smalltalk-capf-eldoc-deliver-releases-empty ()
   "An empty async response must still call eldoc CALLBACK with nil
 so the eldoc machinery doesn't keep showing stale text."
