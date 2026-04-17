@@ -126,7 +126,7 @@
                    for cat = (alist-get 'category proto)
                    nconc
                    (mapcar (lambda (sel)
-                             (list sel (vector sel (or cat ""))))
+                             (list (cons sel cat) (vector sel (or cat ""))))
                            (alist-get 'methods proto)))))
     (with-current-buffer buf
       (pharo-smalltalk-browser-mode)
@@ -139,7 +139,7 @@
             (format " %s (%s side) — %d methods   RET=source  c=toggle side  u=back  g=refresh  q=quit"
                     class side (length rows))))))
 
-(defun pharo-smalltalk-browser--render-source (class selector side)
+(defun pharo-smalltalk-browser--render-source (class selector side &optional category)
   (let* ((class-side-p (eq side 'class))
          (src (pharo-smalltalk-get-method-source class selector class-side-p))
          (buf (get-buffer-create pharo-smalltalk-browser-buffer-name)))
@@ -153,7 +153,7 @@
       (setq-local pharo-smalltalk-buffer-class-side-p class-side-p)
       (setq-local pharo-smalltalk-buffer-source-kind 'method)
       (setq-local pharo-smalltalk-buffer-method-category
-                  pharo-smalltalk-default-method-category)
+                  (or category pharo-smalltalk-default-method-category))
       (goto-char (point-min))
       (setq pharo-smalltalk-browser--current
             `(source ,class ,selector ,side))
@@ -180,7 +180,11 @@
       (`(classes ,_pkg)
        (pharo-smalltalk-browser--render-methods (aref entry 0) 'instance))
       (`(methods ,class ,side)
-       (pharo-smalltalk-browser--render-source class (aref entry 0) side))
+       (pharo-smalltalk-browser--render-source
+        class
+        (car (tabulated-list-get-id))
+        side
+        (cdr (tabulated-list-get-id))))
       (_ (user-error "Nothing to activate in this view")))))
 
 (defun pharo-smalltalk-browser-toggle-side ()

@@ -130,6 +130,25 @@
     (should (gethash "b" table))
     (should (gethash "c" table))))
 
+(ert-deftest pharo-smalltalk-capf-prefetch-error-does-not-cache-nil ()
+  (let ((pharo-smalltalk-capf--method-cache (make-hash-table :test 'equal))
+        (pharo-smalltalk-capf--in-flight-prefetch (make-hash-table :test 'equal))
+        captured-cb
+        (calls 0))
+    (cl-letf (((symbol-function 'pharo-smalltalk--request-async)
+               (lambda (_endpoint callback &rest _params)
+                 (cl-incf calls)
+                 (setq captured-cb callback)))
+              ((symbol-function 'pharo-smalltalk--warn-once)
+               (lambda (&rest _) nil)))
+      (should-not (pharo-smalltalk-capf--methods-like "va"))
+      (should (= calls 1))
+      (funcall captured-cb nil "boom")
+      (should-not (gethash "va" pharo-smalltalk-capf--method-cache))
+      (should-not (gethash "va" pharo-smalltalk-capf--in-flight-prefetch))
+      (should-not (pharo-smalltalk-capf--methods-like "va"))
+      (should (= calls 2)))))
+
 (ert-deftest pharo-smalltalk-format-transcript-and-result-combines-both ()
   (let ((pharo-smalltalk-last-transcript "hello\n"))
     (should (equal (pharo-smalltalk--format-transcript-and-result 7)
@@ -167,6 +186,19 @@
                          "Grandparent>>value"
                          "OtherClass>>value")))))))
 
+(ert-deftest pharo-smalltalk-xref-sort-uses-numeric-rank-fields ()
+  (with-temp-buffer
+    (setq-local pharo-smalltalk-buffer-class-name nil)
+    (let* ((short (pharo-smalltalk-xref--method-ref "OtherClass" "tiny" nil))
+           (long (pharo-smalltalk-xref--method-ref
+                  "OtherClass"
+                  (make-string 120 ?a)
+                  nil))
+           (sorted (pharo-smalltalk-xref--sort-items (list long short))))
+      (should (equal (mapcar #'xref-item-summary sorted)
+                     (list "OtherClass>>tiny"
+                           (format "OtherClass>>%s" (make-string 120 ?a))))))))
+
 (ert-deftest pharo-smalltalk-xref-group-labels-follow-current-lineage ()
   (with-temp-buffer
     (setq-local pharo-smalltalk-buffer-class-name "Child")
@@ -196,6 +228,20 @@
       (let ((item (pharo-smalltalk-xref--class-definition "Parent")))
         (should (equal (xref-location-group (xref-item-location item))
                        "Superclass chain"))))))
+
+(ert-deftest pharo-smalltalk-browser-source-keeps-method-category ()
+  (let ((pharo-smalltalk-browser-buffer-name "*Pharo Browser Test*"))
+    (cl-letf (((symbol-function 'pharo-smalltalk-get-method-source)
+               (lambda (&rest _) "value ^ 1")))
+      (unwind-protect
+          (progn
+            (pharo-smalltalk-browser--render-source
+             "DemoClass" "value" 'instance "accessing")
+            (with-current-buffer pharo-smalltalk-browser-buffer-name
+              (should (equal pharo-smalltalk-buffer-method-category
+                             "accessing"))))
+        (when (get-buffer pharo-smalltalk-browser-buffer-name)
+          (kill-buffer pharo-smalltalk-browser-buffer-name))))))
 
 (ert-deftest pharo-smalltalk-test-parse-summary-handles-singular-plural ()
   (should

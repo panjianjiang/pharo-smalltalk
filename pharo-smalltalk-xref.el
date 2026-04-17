@@ -217,8 +217,17 @@ current superclass chain, then other methods, then shorter summaries."
                 (rb (pharo-smalltalk-xref--item-rank b)))
             (cond
              ((equal ra rb) nil)
-             ((string< (format "%S" ra) (format "%S" rb)) t)
-             (t nil))))))
+             (t
+              (catch 'done
+                (while (and ra rb)
+                  (let ((xa (pop ra))
+                        (xb (pop rb)))
+                    (unless (equal xa xb)
+                      (throw 'done
+                             (if (and (numberp xa) (numberp xb))
+                                 (< xa xb)
+                               (string< (format "%s" xa) (format "%s" xb)))))))
+                (< (length ra) (length rb)))))))))
 
 (cl-defmethod xref-backend-definitions ((_ (eql pharo-smalltalk)) identifier)
   (let (locs)

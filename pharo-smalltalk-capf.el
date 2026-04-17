@@ -78,14 +78,15 @@
   "Return selectors matching QUERY from cache, or nil while a prefetch flies.
 A nil return on cold cache schedules an async prefetch; the next
 completion poll (typically the next keystroke) will hit warm data."
-  (let ((cached (pharo-smalltalk-capf--cached
-                 pharo-smalltalk-capf--method-cache
-                 query
-                 (lambda () nil)
-                 pharo-smalltalk-capf-method-cache-max-entries)))
-    (or cached
-        (progn (pharo-smalltalk-capf--prefetch-methods-like query)
-               nil))))
+  (let ((entry (gethash query pharo-smalltalk-capf--method-cache)))
+    (cond
+     ((and entry (< (- (float-time) (cdr entry))
+                    pharo-smalltalk-capf-cache-ttl))
+      (car entry))
+     (t
+      (remhash query pharo-smalltalk-capf--method-cache)
+      (pharo-smalltalk-capf--prefetch-methods-like query)
+      nil))))
 
 (defun pharo-smalltalk-capf--prefetch-methods-like (query)
   "Kick off an async `/search-methods-like' for QUERY, dedup'd by query."
@@ -98,6 +99,7 @@ completion poll (typically the next keystroke) will hit warm data."
         (remhash query pharo-smalltalk-capf--in-flight-prefetch)
         (cond
          (error
+          (remhash query pharo-smalltalk-capf--method-cache)
           (pharo-smalltalk--warn-once
            'capf-methods-like-prefetch
            "prefetch search-methods-like %S failed: %s" query error))
