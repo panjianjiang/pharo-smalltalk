@@ -597,6 +597,39 @@ structured payload and return the `selector' field verbatim."
       (should (equal (alist-get 'is_class_method (plist-get captured :data))
                      "true")))))
 
+(ert-deftest pharo-smalltalk-compile-method-uses-default-category-when-nil ()
+  "Nil CATEGORY should fall back to `pharo-smalltalk-default-method-category'."
+  (let ((pharo-smalltalk-default-method-category "custom-default")
+        captured)
+    (cl-letf (((symbol-function 'pharo-smalltalk--request)
+               (lambda (_endpoint &rest kwargs)
+                 (setq captured kwargs)
+                 '((success . t) (result . ((selector . "answer")))))))
+      (pharo-smalltalk-compile-method "Demo" "instance" nil "answer\n\t^ 42")
+      (should (equal (alist-get 'category (plist-get captured :data))
+                     "custom-default")))))
+
+(ert-deftest pharo-smalltalk-compile-method-surfaces-structured-error-and-transcript ()
+  "Compile failures should signal a formatted error while preserving transcript metadata."
+  (let ((pharo-smalltalk-last-transcript nil)
+        (pharo-smalltalk-last-response nil))
+    (cl-letf (((symbol-function 'pharo-smalltalk--request)
+               (lambda (_endpoint &rest _kwargs)
+                 '((success . :json-false)
+                   (transcript . "compile-log")
+                   (error . ((description . "OCCodeError: syntax exploded")
+                             (line . 2)
+                             (column . 9)
+                             (location . 16)))))))
+      (should-error
+       (pharo-smalltalk-compile-method "Demo" "instance" "testing" "broken\n\t^ x @@@")
+       :type 'error)
+      (should (equal pharo-smalltalk-last-transcript "compile-log"))
+      (should (equal (alist-get 'transcript pharo-smalltalk-last-response)
+                     "compile-log"))
+      (should (equal (alist-get 'line (alist-get 'error pharo-smalltalk-last-response))
+                     2)))))
+
 (ert-deftest pharo-smalltalk-compile-class-definition-posts-structured-payload ()
   "Tonel class source is parsed client-side and submitted as structured
 JSON; arrays go through as JSON arrays, not Smalltalk string fragments."
@@ -705,6 +738,41 @@ emits a drop notice when the server reports dropped entries."
     (pharo-smalltalk-transcript--append buf '((seq . 1) (text . "x") (dropped . 0)))
     ;; No error raised is the assertion.
     (should t)))
+
+(ert-deftest pharo-smalltalk-transcript-poll-once-uses-seq-and-appends-result ()
+  "Polling should send the current cursor and append the decoded payload."
+  (with-temp-buffer
+    (pharo-smalltalk-transcript-mode)
+    (pharo-smalltalk-transcript--stop-timer)
+    (setq pharo-smalltalk-transcript--seq 4)
+    (let (captured-callback captured-params)
+      (cl-letf (((symbol-function 'pharo-smalltalk--request-async)
+                 (lambda (_endpoint callback &rest kwargs)
+                   (setq captured-callback callback
+                         captured-params (plist-get kwargs :params))
+                   'dispatched)))
+        (should (eq (pharo-smalltalk-transcript--poll-once (current-buffer)) t))
+        (should (equal captured-params '((since . "4"))))
+        (funcall captured-callback '((success . t)
+                                     (result . ((seq . 6)
+                                                (text . "abc\r")
+                                                (dropped . 0))))
+                 nil)
+        (should (equal pharo-smalltalk-transcript--seq 6))
+        (should (string-match-p "abc\n" (buffer-string)))
+        (should-not pharo-smalltalk-transcript--inflight)))))
+
+(ert-deftest pharo-smalltalk-transcript-poll-once-skips-when-inflight ()
+  "Polling again while a request is in flight should be a no-op."
+  (with-temp-buffer
+    (pharo-smalltalk-transcript-mode)
+    (pharo-smalltalk-transcript--stop-timer)
+    (setq pharo-smalltalk-transcript--inflight t)
+    (cl-letf (((symbol-function 'pharo-smalltalk--request-async)
+               (lambda (&rest _)
+                 (should nil)
+                 'unexpected)))
+      (should-not (pharo-smalltalk-transcript--poll-once (current-buffer))))))
 
 (ert-deftest pharo-smalltalk-inspector-drill-pushes-stack ()
   "Drilling from one view stashes the previous tree on the back stack."
