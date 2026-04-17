@@ -30,9 +30,10 @@ by the Pharo image.
 - Emacs 29.1+.
 - This repo's `BaselineOfPharoSmalltalkBridge`, which loads upstream
   [PharoSmalltalkInteropServer][pharosis] plus the `Sis-Bridge-Extras`
-  package (Transcript capture + NeoJSON fallbacks). Without the extras
-  the `/eval` endpoint can return HTTP 500 for non-trivial results, and
-  Transcript output is not surfaced to Emacs.
+  package (Transcript capture + targeted NeoJSON helpers). Without the
+  extras the `/eval` endpoint can return HTTP 500 for Transcript /
+  Association-heavy results, and Transcript output is not surfaced to
+  Emacs.
 
 [pharosis]: https://github.com/mumez/PharoSmalltalkInteropServer
 
@@ -51,10 +52,10 @@ Metacello new
 SisServer current restart.
 ```
 
-The extras add Transcript capture in `handleEval:` and NeoJSON
-fallbacks for `Object` / `Association` so arbitrary results serialize
-cleanly. See [`pharo/README.md`](pharo/README.md) for what each piece
-does, override semantics, and the legacy `install.st` fallback.
+The extras add Transcript capture in `handleEval:` and targeted
+NeoJSON helpers for `StThreadSafeTranscript` / `Association`. See
+[`pharo/README.md`](pharo/README.md) for what each piece does,
+override semantics, and the legacy `install.st` fallback.
 
 [PharoSmalltalkInteropServer]: https://github.com/mumez/PharoSmalltalkInteropServer
 
@@ -202,16 +203,17 @@ block.
 | `pharo-smalltalk-global-command-key` | `C-c s` | global prefix key (nil to disable) |
 | `pharo-smalltalk-auto-mode-patterns` | `.st` / `.smalltalk` / `.tonel` | file associations |
 | `pharo-smalltalk-indent-offset` | `2` | indent step |
-| `pharo-smalltalk-class-cache-ttl` | `30` | completion cache TTL (seconds) |
+| `pharo-smalltalk-class-cache-ttl` | `30` | class-name cache TTL (seconds) |
+| `pharo-smalltalk-capf-cache-ttl` | `15` | completion/query cache TTL (seconds) |
 
 All are under the `pharo-smalltalk` customize group.
 
 ## Troubleshooting
 
 - **HTTP 500 `NeoJSONMappingNotFound`** — you haven't applied
-  `pharo/install.st` (or the two `*.extension.st` files). Without the
-  fallback `neoJsonOn:` methods, evaluating anything that returns an
-  Association, Class, Morph, etc. fails to serialize.
+  `pharo/install.st` (or loaded `Sis-Bridge-Extras`). Without the
+  extra `neoJsonOn:` methods, evaluating values such as `Transcript`
+  or `Association` can fail to serialize.
 - **Transcript output missing from Emacs result** — same fix: the
   patched `handleEval:` is what surfaces Transcript text in the
   response.

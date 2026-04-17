@@ -1,30 +1,25 @@
-"Install the Sis-Core patches shipped with pharo-smalltalk.
+"Install the Sis-Bridge-Extras patches shipped with pharo-smalltalk.
 
 Assumes PharoSmalltalkInteropServer is already loaded in the image
 (e.g. via Metacello from https://github.com/mumez/PharoSmalltalkInteropServer).
 
 This script replaces SisServer>>handleEval: with a version that captures
-Transcript output alongside the result, and installs two NeoJSON
-extension methods (Object>>neoJsonOn: and Association>>neoJsonOn:) so
-arbitrary return values serialize cleanly over HTTP.
+Transcript output alongside the result, and installs two targeted NeoJSON
+extension methods:
+  - StThreadSafeTranscript>>neoJsonOn:
+  - Association>>neoJsonOn:
 
-Run via:
-    `./pharo Pharo.image eval --save ""`
-    or from Playground:  `FileStream fileIn: '/path/to/pharo/install.st'`
+Run from a Playground:
+    Smalltalk compiler evaluate:
+        '/path/to/pharo-smalltalk/pharo/install.st' asFileReference contents
 "
 
-| sisServer scriptDir sisCoreDir compile |
+| sisServer transcriptClass compile |
 sisServer := Smalltalk globals at: #SisServer ifAbsent: [
 	Error signal: 'PharoSmalltalkInteropServer is not loaded in this image.' ].
-
-scriptDir := (FileLocator imageDirectory asFileReference parent) fullName asFileReference.
-"Resolve this script's directory relative to the repo checkout."
-sisCoreDir := (FileLocator imageDirectory asFileReference
-	/ '..' / 'pharo-smalltalk' / 'pharo' / 'Sis-Core') asFileReference.
-sisCoreDir exists ifFalse: [
-	"Fallback: ask user to set it manually."
-	Transcript crShow: 'Adjust `sisCoreDir` at the top of install.st to point to pharo/Sis-Core/ in this repo.'.
-	^ self ].
+transcriptClass := Smalltalk globals
+	at: #StThreadSafeTranscript
+	ifAbsent: [ (Smalltalk globals at: #Transcript) class ].
 
 compile := [ :targetClass :category :source |
 	targetClass compile: source classified: category.
@@ -72,22 +67,22 @@ compile
 				1 to: afterIndex do: [ :i |
 					(recordings at: i) ifNotNil: [ :e | s << e asString ] ] ] ]'.
 
-"3. NeoJSON fallback for arbitrary objects"
+"3. NeoJSON mapping for the Transcript singleton"
 compile
-	value: Object
-	value: '*Sis-Core'
+	value: transcriptClass
+	value: '*Sis-Bridge-Extras'
 	value: 'neoJsonOn: neoJSONWriter
-	"Fallback: serialize arbitrary objects as their printString."
+	"Match the Playground/UI convention for the Transcript singleton."
 	neoJSONWriter writeString: self printString'.
 
 "4. NeoJSON mapping for Association"
 compile
 	value: Association
-	value: '*Sis-Core'
+	value: '*Sis-Bridge-Extras'
 	value: 'neoJsonOn: neoJSONWriter
 	"An Association serializes as a one-entry JSON object."
 	neoJSONWriter writeMap: (Dictionary new
 		at: self key asString put: self value;
 		yourself)'.
 
-Transcript crShow: 'Sis-Core patches installed. Restart the server with `SisServer restart`.'.
+Transcript crShow: 'Sis-Bridge-Extras patches installed. Restart the server with `SisServer restart`.'. 

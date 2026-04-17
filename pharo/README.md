@@ -7,10 +7,10 @@ small additions on top of upstream
 1. **Transcript capture in `SisServer>>handleEval:`** — `/eval` returns
    the Transcript output produced during evaluation alongside the
    result, so Emacs can show both without a second round-trip.
-2. **NeoJSON fallback extensions** — `Object>>neoJsonOn:` (printString
-   fallback) and `Association>>neoJsonOn:` (one-entry map) so arbitrary
-   return values serialize cleanly instead of raising
-   `NeoJSONMappingNotFound` as HTTP 500.
+2. **Targeted NeoJSON extensions** — `StThreadSafeTranscript>>neoJsonOn:`
+   (Playground-style display string) and `Association>>neoJsonOn:`
+   (one-entry map) so common `/eval` results serialize cleanly without
+   globally changing NeoJSON's fallback for every object.
 
 [PharoSmalltalkInteropServer]: https://github.com/mumez/PharoSmalltalkInteropServer
 
@@ -19,7 +19,8 @@ small additions on top of upstream
 | Path | Purpose |
 | --- | --- |
 | `BaselineOfPharoSmalltalkBridge/` | Metacello baseline; depends on upstream + loads `Sis-Bridge-Extras`. |
-| `Sis-Bridge-Extras/` | Tonel package containing the three extension methods. |
+| `Sis-Bridge-Extras/` | Tonel package containing the two NeoJSON extensions plus the `SisServer` override. |
+| `Sis-Bridge-Extras-Tests/` | Optional integration tests for Transcript capture and serialization. |
 | `install.st` | Legacy runtime installer kept as a fallback. |
 
 ## Recommended install — Metacello
@@ -46,6 +47,15 @@ serves `/eval`.
 > `handleEval:` entirely; reload upstream `PharoSmalltalkInteropServer`
 > to restore the original.
 
+Load the optional test package with:
+
+```smalltalk
+Metacello new
+    baseline: 'PharoSmalltalkBridge';
+    repository: 'github://panjianjiang/pharo-smalltalk:main/pharo';
+    load: 'tests'.
+```
+
 ## Fallback install — install.st
 
 If you already maintain a fork of `PharoSmalltalkInteropServer`
@@ -53,12 +63,13 @@ through Iceberg and don't want to add another Metacello dependency,
 run the legacy script in any Playground:
 
 ```smalltalk
-FileStream fileIn: '/path/to/pharo-smalltalk/pharo/install.st'.
+Smalltalk compiler evaluate:
+    '/path/to/pharo-smalltalk/pharo/install.st' asFileReference contents.
 SisServer restart.
 ```
 
 `install.st` compiles the same four methods directly into the running
-image. Idempotent.
+image. It is path-agnostic and idempotent.
 
 ## Verification
 
@@ -74,3 +85,5 @@ output appears inline:
 ```smalltalk
 Transcript crShow: 'hello from Pharo'. 1 + 2
 ```
+
+For Pharo-side regression coverage, run `SisBridgeExtrasTest`.
