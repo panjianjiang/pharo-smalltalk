@@ -31,6 +31,14 @@ SisTranscriptTee class >> ensureExtraRoutesOn: aSisServer [
 		POST: '/transcript/clear' -> [ :req | aSisServer handleTranscriptClear: req ];
 		POST: '/compile-method' -> [ :req | aSisServer handleCompileMethod: req ];
 		POST: '/compile-class' -> [ :req | aSisServer handleCompileClass: req ].
+	"Inspector routes plug in only when Sis-Inspector has been loaded;
+	Sis-Bridge-Extras alone remains useful without them."
+	(Smalltalk globals includesKey: #SisInspector) ifTrue: [
+		teapot
+			POST: '/inspect/expression'
+				-> [ :req | aSisServer handleInspectExpression: req ];
+			GET: '/inspect/ref'
+				-> [ :req | aSisServer handleInspectRef: req ] ].
 	teapotsRouted add: teapot
 ]
 

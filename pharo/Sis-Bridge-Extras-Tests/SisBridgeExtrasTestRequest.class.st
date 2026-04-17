@@ -25,6 +25,11 @@ SisBridgeExtrasTestRequest class >> withJson: aString params: aDictionary [
 ]
 
 { #category : 'accessing' }
+SisBridgeExtrasTestRequest >> at: aKey [
+	^ self params at: aKey
+]
+
+{ #category : 'accessing' }
 SisBridgeExtrasTestRequest >> at: aKey ifAbsent: aBlock [
 	^ self params at: aKey ifAbsent: aBlock
 ]

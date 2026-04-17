@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **Inspector endpoints**: new `POST /inspect/expression` (body
+  `{expression}`) and `GET /inspect/ref?ref=<n>` on the server, shipped
+  as Sis-Inspector extension methods on `SisServer`.  Register only
+  when Sis-Inspector is loaded; Sis-Bridge-Extras on its own remains a
+  valid install.  Sis-Inspector-Tests +3 covering the happy path,
+  drill-down via registered ref, and the unknown-ref error response.
+  Enables MCP clients (and any HTTP caller) to drill into live objects
+  without round-tripping through `/eval` with hand-escaped
+  `SisInspector inspectExpression:` strings.
+
 - **Structured compile endpoints** — `POST /compile-method` and
   `POST /compile-class` on the server, alongside `/eval` and the
   transcript routes.  Both accept plain JSON: the method endpoint

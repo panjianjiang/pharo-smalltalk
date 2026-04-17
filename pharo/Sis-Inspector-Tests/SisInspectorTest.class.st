@@ -72,6 +72,58 @@ SisInspectorTest >> testChildLimitTruncatesHugeSequences [
 ]
 
 { #category : 'tests' }
+SisInspectorTest >> testInspectExpressionEndpointReturnsTree [
+	| request resp tree |
+	request := self requestWithJsonBody: (Dictionary new
+		at: #expression put: 'OrderedCollection new add: 7; yourself';
+		yourself).
+	resp := SisServer current handleInspectExpression: request.
+	self assert: (resp at: #success).
+	tree := resp at: #result.
+	self assert: (tree at: 'class') equals: 'OrderedCollection'.
+	self assert: (tree at: 'size') equals: 1
+]
+
+{ #category : 'tests' }
+SisInspectorTest >> testInspectRefEndpointDrillsIntoRegisteredObject [
+	| tree firstRefRow refRequest resp drill |
+	tree := SisInspector inspectExpression: '#(99) asOrderedCollection'.
+	firstRefRow := (tree at: 'indexable') first.
+	refRequest := self requestWithParams: (Dictionary new
+		at: #ref put: (firstRefRow at: 'ref') printString;
+		yourself).
+	resp := SisServer current handleInspectRef: refRequest.
+	self assert: (resp at: #success).
+	drill := resp at: #result.
+	self assert: (drill at: 'class') equals: 'SmallInteger'.
+	self assert: (drill at: 'print') equals: '99'
+]
+
+{ #category : 'tests' }
+SisInspectorTest >> testInspectRefEndpointSurfacesUnknownRefError [
+	| refRequest resp |
+	refRequest := self requestWithParams: (Dictionary new
+		at: #ref put: '999999';
+		yourself).
+	resp := SisServer current handleInspectRef: refRequest.
+	self deny: (resp at: #success).
+	self
+		assert: (((resp at: #error) at: 'description')
+			includesSubstring: 'No object registered')
+]
+
+{ #category : 'private' }
+SisInspectorTest >> requestWithJsonBody: aDictionary [
+	^ SisBridgeExtrasTestRequest
+		withJson: (NeoJSONWriter toString: aDictionary)
+]
+
+{ #category : 'private' }
+SisInspectorTest >> requestWithParams: aDictionary [
+	^ SisBridgeExtrasTestRequest withJson: '{}' params: aDictionary
+]
+
+{ #category : 'tests' }
 SisInspectorTest >> testPrintStringBounded [
 	| tree |
 	tree := SisInspector inspectExpression: 'String new: 4096 withAll: $x'.
