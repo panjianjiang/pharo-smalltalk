@@ -61,6 +61,45 @@ SisBridgeExtrasTest >> removeClassResponseFor: aDictionary [
 			(SisBridgeExtrasTestRequest withJson: (NeoJSONWriter toString: aDictionary))
 ]
 
+{ #category : 'private' }
+SisBridgeExtrasTest >> transcriptPollResponseSince: anInteger [
+	^ SisServer current
+		handleTranscriptPoll:
+			(SisBridgeExtrasTestRequest
+				withJson: '{}'
+				params: (Dictionary new
+					at: #since put: anInteger asString;
+					yourself))
+]
+
+{ #category : 'private' }
+SisBridgeExtrasTest >> transcriptClearResponse [
+	^ SisServer current
+		handleTranscriptClear: (SisBridgeExtrasTestRequest withJson: '{}')
+]
+
+{ #category : 'private' }
+SisBridgeExtrasTest >> inspectExpressionResponseFor: aString [
+	^ SisServer current
+		handleInspectExpression:
+			(SisBridgeExtrasTestRequest withJson:
+				(NeoJSONWriter toString:
+					(Dictionary new
+						at: #expression put: aString;
+						yourself)))
+]
+
+{ #category : 'private' }
+SisBridgeExtrasTest >> inspectRefResponseFor: anInteger [
+	^ SisServer current
+		handleInspectRef:
+			(SisBridgeExtrasTestRequest
+				withJson: '{}'
+				params: (Dictionary new
+					at: #ref put: anInteger asString;
+					yourself))
+]
+
 { #category : 'tests' }
 SisBridgeExtrasTest >> testAssociationSerializesAsOneEntryMap [
 	self
@@ -87,6 +126,34 @@ SisBridgeExtrasTest >> testEvalReturnsTranscriptPayloadOnFailure [
 ]
 
 { #category : 'tests' }
+SisBridgeExtrasTest >> testTranscriptPollReturnsEntriesFromEval [
+	| cleared resp poll |
+	cleared := self transcriptClearResponse.
+	self assert: ((cleared at: #result) at: 'seq') equals: 0.
+	resp := self evalResponseForCode: 'Transcript show: ''poll''; cr. 1 + 2'.
+	self assert: (resp at: #success).
+	poll := self transcriptPollResponseSince: 0.
+	self assert: (poll at: #success).
+	self assert: (((poll at: #result) at: 'text') includesSubstring: 'poll').
+	self assert: (((poll at: #result) at: 'seq') >= 1)
+]
+
+{ #category : 'tests' }
+SisBridgeExtrasTest >> testTranscriptClearResetsPollCursor [
+	| first cleared second |
+	self evalResponseForCode: 'Transcript show: ''clear-me''; cr. 7'.
+	first := self transcriptPollResponseSince: 0.
+	self assert: (((first at: #result) at: 'seq') >= 1).
+	self assert: (((first at: #result) at: 'text') includesSubstring: 'clear-me').
+	cleared := self transcriptClearResponse.
+	self assert: ((cleared at: #result) at: 'seq') equals: 0.
+	second := self transcriptPollResponseSince: 0.
+	self assert: ((second at: #result) at: 'seq') equals: 0.
+	self assert: ((second at: #result) at: 'text') equals: ''.
+	self assert: ((second at: #result) at: 'entries') equals: #()
+]
+
+{ #category : 'tests' }
 SisBridgeExtrasTest >> testEvalWithoutInspectHasNoResultTree [
 	| resp |
 	resp := self evalResponseForCode: 'OrderedCollection new add: 10; yourself'.
@@ -105,6 +172,18 @@ SisBridgeExtrasTest >> testEvalWithInspectAttachesResultTree [
 	self assert: (tree at: #class) equals: 'OrderedCollection'.
 	self assert: (tree at: #size) equals: 1.
 	self assert: (tree at: #ref) isInteger
+]
+
+{ #category : 'tests' }
+SisBridgeExtrasTest >> testInspectExpressionAndRefRoundTrip [
+	| root child |
+	root := self inspectExpressionResponseFor: 'OrderedCollection with: 10 with: 20'.
+	self assert: (root at: #success).
+	self assert: (((root at: #result) at: #class) = 'OrderedCollection').
+	self assert: (((root at: #result) at: #ref) isInteger).
+	child := self inspectRefResponseFor: ((root at: #result) at: #ref).
+	self assert: (child at: #success).
+	self assert: (((child at: #result) at: #class) = 'OrderedCollection')
 ]
 
 { #category : 'tests' }
