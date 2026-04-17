@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+- **Structured compile endpoints** — `POST /compile-method` and
+  `POST /compile-class` on the server, alongside `/eval` and the
+  transcript routes.  Both accept plain JSON: the method endpoint
+  takes `{class_name, method_source, category, is_class_method}`
+  and returns `{selector, class_name, is_class_method, category}`;
+  the class endpoint takes `{class_name, superclass, package, tag,
+  inst_vars, class_vars, class_inst_vars}` and returns
+  `{class_name, created}` (with `created=false` on update).
+  `pharo-smalltalk-compile-method' and
+  `pharo-smalltalk-compile-class-definition' now POST to them
+  directly — no more Smalltalk code-generation on the client, no
+  more double-escaping the source string through `'` doubling and
+  JSON quoting.  Fewer AI round-trips needed to recover from a
+  mangled method body, and payloads are small structured JSON.
+- Pharo tests +5 (`SisBridgeExtrasTest`: class create + update,
+  instance method compile, class-side method compile, error path
+  reports success=false with a description).  Emacs ERT 41 → 44
+  assert payload shape + is_class_method flag routing + vector
+  arrays for the class endpoint.
+- Live verified: `pharo-smalltalk-compile-class-definition' +
+  two `pharo-smalltalk-compile-method' calls, then `(sum, answer)`
+  both return 42 through `/eval'.
+
 - **Live Transcript channel**: server installs a `SisTranscriptTee`
   that wraps the real `Transcript`, forwarding every write to the
   UI while also recording into a capped ring (4096 entries) with a

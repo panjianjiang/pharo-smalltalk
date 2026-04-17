@@ -1291,33 +1291,47 @@ alist (screenshot path + summary + structure)."
      (t 'code))))
 
 (defun pharo-smalltalk-compile-method (class-name side category source)
-  "Compile SOURCE on CLASS-NAME, SIDE and CATEGORY."
-  (let ((result
-         (pharo-smalltalk-eval
-          (format
-           (concat "| cls selector |"
-                   " cls := Smalltalk at: #%s."
-                   " %s"
-                   " selector := cls compile: %s classified: %s."
-                   " selector asString")
-           class-name
-           (if (string= side "class") "cls := cls class." "")
-           (pharo-smalltalk--smalltalk-string source)
-           (pharo-smalltalk--smalltalk-string category)))))
+  "Compile SOURCE on CLASS-NAME at SIDE (\"instance\"/\"class\") under CATEGORY.
+Uses the structured `/compile-method' endpoint so neither CLASS-NAME
+nor SOURCE needs Smalltalk-string escaping.  Returns the selector."
+  (let* ((class-side-p (or (eq side 'class) (equal side "class")))
+         (response (pharo-smalltalk--result
+                    (pharo-smalltalk--request
+                     "/compile-method"
+                     :type "POST"
+                     :data `((class_name . ,class-name)
+                             (method_source . ,source)
+                             (category . ,(or category pharo-smalltalk-default-method-category))
+                             (is_class_method . ,(if class-side-p "true" "false"))))))
+         (selector (alist-get 'selector response)))
     (message "Compiled %s%s>>%s"
-             class-name
-             (if (string= side "class") " class" "")
-             result)
+             class-name (if class-side-p " class" "") selector)
     (run-hooks 'pharo-smalltalk-after-mutation-hook)
-    result))
+    selector))
 
 (defun pharo-smalltalk-compile-class-definition (source)
-  "Compile a `Class { ... }' definition SOURCE via ShiftClassBuilder."
+  "Compile a `Class { ... }' definition SOURCE via the `/compile-class' endpoint.
+Parses the Tonel SOURCE on the client side, then submits the structured
+fields as JSON so neither the SOURCE text nor any inst-var name needs
+Smalltalk escaping."
   (let* ((definition (pharo-smalltalk-parse-class-definition source))
-         (name (alist-get 'name definition)))
+         (name (alist-get 'name definition))
+         (package (alist-get 'package definition)))
     (unless name
       (user-error "Could not parse class name from class definition"))
-    (pharo-smalltalk-eval (pharo-smalltalk--class-builder-script definition))
+    (unless package
+      (user-error "Could not parse package name from class definition"))
+    (pharo-smalltalk--result
+     (pharo-smalltalk--request
+      "/compile-class"
+      :type "POST"
+      :data `((class_name . ,name)
+              (superclass . ,(or (alist-get 'superclass definition) "Object"))
+              (package . ,package)
+              (tag . ,(alist-get 'tag definition))
+              (inst_vars . ,(vconcat (or (alist-get 'instvars definition) '())))
+              (class_vars . ,(vconcat (or (alist-get 'classvars definition) '())))
+              (class_inst_vars . ,(vconcat (or (alist-get 'classinstvars definition) '()))))))
     (message "Installed class %s" name)
     (run-hooks 'pharo-smalltalk-after-mutation-hook)
     name))

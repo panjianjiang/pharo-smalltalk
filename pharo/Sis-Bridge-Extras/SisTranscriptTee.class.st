@@ -17,18 +17,20 @@ Class {
 }
 
 { #category : 'routes' }
-SisTranscriptTee class >> ensureRoutesOn: aSisServer [
-	"Register /transcript/poll and /transcript/clear on the server's teapot
-	idempotently: we remember the teapot instance, so restarting (which
+SisTranscriptTee class >> ensureExtraRoutesOn: aSisServer [
+	"Register all Sis-Bridge-Extras routes on the server's teapot
+	idempotently: we remember teapot identity, so restarting (which
 	rebuilds the teapot) re-arms the routes while a re-invocation on the
-	same teapot is a no-op."
+	same teapot is a no-op. Extensions to this list belong here too."
 	| teapot |
 	teapot := aSisServer teapot.
 	teapotsRouted := teapotsRouted ifNil: [ IdentitySet new ].
 	(teapotsRouted includes: teapot) ifTrue: [ ^ self ].
 	teapot
 		GET: '/transcript/poll' -> [ :req | aSisServer handleTranscriptPoll: req ];
-		POST: '/transcript/clear' -> [ :req | aSisServer handleTranscriptClear: req ].
+		POST: '/transcript/clear' -> [ :req | aSisServer handleTranscriptClear: req ];
+		POST: '/compile-method' -> [ :req | aSisServer handleCompileMethod: req ];
+		POST: '/compile-class' -> [ :req | aSisServer handleCompileClass: req ].
 	teapotsRouted add: teapot
 ]
 

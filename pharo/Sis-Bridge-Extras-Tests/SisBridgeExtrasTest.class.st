@@ -23,6 +23,30 @@ SisBridgeExtrasTest >> evalResponseForCode: aString params: aDictionary [
 	^ SisServer current handleEval: request
 ]
 
+{ #category : 'private' }
+SisBridgeExtrasTest >> compileMethodResponseFor: aDictionary [
+	^ SisServer current
+		handleCompileMethod:
+			(SisBridgeExtrasTestRequest withJson: (NeoJSONWriter toString: aDictionary))
+]
+
+{ #category : 'private' }
+SisBridgeExtrasTest >> compileClassResponseFor: aDictionary [
+	^ SisServer current
+		handleCompileClass:
+			(SisBridgeExtrasTestRequest withJson: (NeoJSONWriter toString: aDictionary))
+]
+
+{ #category : 'private' }
+SisBridgeExtrasTest >> ensureDemoClassAbsent [
+	(Smalltalk globals at: #SisCompileApiDemo ifAbsent: [ nil ])
+		ifNotNil: [ :cls | cls removeFromSystem ].
+	(PackageOrganizer default
+		packageNamed: 'Sis-Compile-Api-Demo'
+		ifAbsent: [ nil ])
+		ifNotNil: [ :pkg | pkg removeFromSystem ]
+]
+
 { #category : 'tests' }
 SisBridgeExtrasTest >> testAssociationSerializesAsOneEntryMap [
 	self
@@ -77,6 +101,115 @@ SisBridgeExtrasTest >> testEvalWithInspectFalseHasNoResultTree [
 		params: (Dictionary new at: #inspect put: 'false'; yourself).
 	self assert: (resp at: #success).
 	self deny: (resp includesKey: #result_tree)
+]
+
+{ #category : 'tests' }
+SisBridgeExtrasTest >> testCompileClassCreatesAndReportsCreated [
+	| resp cls |
+	self ensureDemoClassAbsent.
+	[
+		resp := self compileClassResponseFor: (Dictionary new
+			at: #class_name put: 'SisCompileApiDemo';
+			at: #superclass put: 'Object';
+			at: #package put: 'Sis-Compile-Api-Demo';
+			at: #inst_vars put: #('a' 'b');
+			yourself).
+		self assert: (resp at: #success).
+		self assert: ((resp at: #result) at: 'class_name') equals: 'SisCompileApiDemo'.
+		self assert: ((resp at: #result) at: 'created').
+		cls := Smalltalk globals at: #SisCompileApiDemo.
+		self assert: cls instVarNames asArray equals: #('a' 'b')
+	] ensure: [ self ensureDemoClassAbsent ]
+]
+
+{ #category : 'tests' }
+SisBridgeExtrasTest >> testCompileClassReportsUpdatedOnSecondCall [
+	| first second |
+	self ensureDemoClassAbsent.
+	[
+		first := self compileClassResponseFor: (Dictionary new
+			at: #class_name put: 'SisCompileApiDemo';
+			at: #superclass put: 'Object';
+			at: #package put: 'Sis-Compile-Api-Demo';
+			at: #inst_vars put: #('a');
+			yourself).
+		second := self compileClassResponseFor: (Dictionary new
+			at: #class_name put: 'SisCompileApiDemo';
+			at: #superclass put: 'Object';
+			at: #package put: 'Sis-Compile-Api-Demo';
+			at: #inst_vars put: #('a' 'b' 'c');
+			yourself).
+		self assert: ((first at: #result) at: 'created').
+		self deny: ((second at: #result) at: 'created').
+		self assert: (Smalltalk globals at: #SisCompileApiDemo) instVarNames asArray
+			equals: #('a' 'b' 'c')
+	] ensure: [ self ensureDemoClassAbsent ]
+]
+
+{ #category : 'tests' }
+SisBridgeExtrasTest >> testCompileMethodDefinesInstanceMethod [
+	| cls resp |
+	self ensureDemoClassAbsent.
+	[
+		self compileClassResponseFor: (Dictionary new
+			at: #class_name put: 'SisCompileApiDemo';
+			at: #superclass put: 'Object';
+			at: #package put: 'Sis-Compile-Api-Demo';
+			at: #inst_vars put: #('a' 'b');
+			yourself).
+		resp := self compileMethodResponseFor: (Dictionary new
+			at: #class_name put: 'SisCompileApiDemo';
+			at: #method_source put: 'sum	^ a + b';
+			at: #category put: 'accessing';
+			yourself).
+		self assert: (resp at: #success).
+		self assert: ((resp at: #result) at: 'selector') equals: 'sum'.
+		self deny: ((resp at: #result) at: 'is_class_method').
+		cls := Smalltalk globals at: #SisCompileApiDemo.
+		self assert: (cls canUnderstand: #sum).
+		self deny: (cls class canUnderstand: #sum)
+	] ensure: [ self ensureDemoClassAbsent ]
+]
+
+{ #category : 'tests' }
+SisBridgeExtrasTest >> testCompileMethodDefinesClassSideWhenFlagIsTrue [
+	| cls resp |
+	self ensureDemoClassAbsent.
+	[
+		self compileClassResponseFor: (Dictionary new
+			at: #class_name put: 'SisCompileApiDemo';
+			at: #superclass put: 'Object';
+			at: #package put: 'Sis-Compile-Api-Demo';
+			yourself).
+		resp := self compileMethodResponseFor: (Dictionary new
+			at: #class_name put: 'SisCompileApiDemo';
+			at: #method_source put: 'answer	^ 42';
+			at: #is_class_method put: 'true';
+			yourself).
+		self assert: ((resp at: #result) at: 'is_class_method').
+		cls := Smalltalk globals at: #SisCompileApiDemo.
+		self assert: (cls class canUnderstand: #answer).
+		self deny: (cls canUnderstand: #answer)
+	] ensure: [ self ensureDemoClassAbsent ]
+]
+
+{ #category : 'tests' }
+SisBridgeExtrasTest >> testCompileMethodErrorsAreReportedOnSuccessFalse [
+	| resp |
+	self ensureDemoClassAbsent.
+	[
+		self compileClassResponseFor: (Dictionary new
+			at: #class_name put: 'SisCompileApiDemo';
+			at: #superclass put: 'Object';
+			at: #package put: 'Sis-Compile-Api-Demo';
+			yourself).
+		resp := self compileMethodResponseFor: (Dictionary new
+			at: #class_name put: 'SisCompileApiDemo';
+			at: #method_source put: 'brokenMethod	^ @@@@';
+			yourself).
+		self deny: (resp at: #success).
+		self assert: ((resp at: #error) at: 'description') isString
+	] ensure: [ self ensureDemoClassAbsent ]
 ]
 
 { #category : 'tests' }

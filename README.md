@@ -200,6 +200,23 @@ capped-ring entries with a monotonic sequence number.  Polls request
 `?since=<seq>`; dropped entries (ring eviction past the cursor) are
 surfaced as a `[… N entries dropped …]` line in the buffer.
 
+### Structured compile API
+
+The server also exposes two structured JSON endpoints for editing the
+image, so AI clients never have to generate a Smalltalk string that
+JSON then has to escape:
+
+| Endpoint | Body | Result |
+| --- | --- | --- |
+| `POST /compile-method` | `{class_name, method_source, category, is_class_method}` | `{selector, class_name, is_class_method, category}` |
+| `POST /compile-class` | `{class_name, superclass, package, tag, inst_vars, class_vars, class_inst_vars}` | `{class_name, created}` |
+
+`pharo-smalltalk-compile-method` and
+`pharo-smalltalk-compile-class-definition` go through these; the
+Tonel `Class { … }` text you pass in gets parsed client-side and the
+fields are submitted as JSON, with `inst_vars` / `class_vars` /
+`class_inst_vars` as proper arrays.
+
 ### Navigation
 
 With `pharo-smalltalk-xref` loaded (default), `M-.` on a class or

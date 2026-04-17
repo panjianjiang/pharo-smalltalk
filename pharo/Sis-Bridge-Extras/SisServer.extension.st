@@ -100,6 +100,104 @@ SisServer >> start [
 	"Ensure the transcript tee is installed and our extra routes are
 	registered on the current teapot, then hand off to Teapot's start."
 	SisTranscriptTee install.
-	SisTranscriptTee ensureRoutesOn: self.
+	SisTranscriptTee ensureExtraRoutesOn: self.
 	self teapot start
+]
+
+{ #category : '*Sis-Bridge-Extras' }
+SisServer >> handleCompileMethod: request [
+	"Compile a single method on a named class.  Body JSON keys:
+		class_name       (required, String)
+		method_source    (required, String — the full Smalltalk source)
+		category         (optional, String, defaults to 'as yet unclassified')
+		is_class_method  (optional, Boolean or 'true'/'false')
+	Returns {selector, class_name, is_class_method, category}."
+	^ self returnResultDo: [
+		| json className isClassSide source category target selector |
+		json := NeoJSONReader fromString: request entity contents.
+		className := json at: #class_name.
+		source := json at: #method_source.
+		category := json at: #category ifAbsent: [ 'as yet unclassified' ].
+		isClassSide := self coerceBoolean: (json at: #is_class_method ifAbsent: [ false ]).
+		target := Smalltalk globals at: className asSymbol.
+		isClassSide ifTrue: [ target := target class ].
+		selector := target compile: source classified: category.
+		Dictionary new
+			at: 'selector' put: selector asString;
+			at: 'class_name' put: className;
+			at: 'is_class_method' put: isClassSide;
+			at: 'category' put: category;
+			yourself ]
+]
+
+{ #category : '*Sis-Bridge-Extras' }
+SisServer >> handleCompileClass: request [
+	"Create or update a class via ShiftClassBuilder.  Body JSON keys:
+		class_name       (required, String)
+		superclass       (optional, String, defaults to 'Object')
+		package          (required, String)
+		tag              (optional, String)
+		inst_vars        (optional, Array of String)
+		class_vars       (optional, Array of String)
+		class_inst_vars  (optional, Array of String)
+	Returns {class_name, created: true|false}."
+	^ self returnResultDo: [
+		| json className superclassName package tag instVars classVars
+		  classInstVars existing builder superclass cls |
+		json := NeoJSONReader fromString: request entity contents.
+		className := json at: #class_name.
+		superclassName := (json at: #superclass ifAbsent: [ 'Object' ]) asString.
+		package := json at: #package.
+		tag := json at: #tag ifAbsent: [ nil ].
+		instVars := (json at: #inst_vars ifAbsent: [ #() ]) asArray.
+		classVars := (json at: #class_vars ifAbsent: [ #() ]) asArray.
+		classInstVars := (json at: #class_inst_vars ifAbsent: [ #() ]) asArray.
+		existing := Smalltalk globals at: className asSymbol ifAbsent: [ nil ].
+		superclass := Smalltalk globals at: superclassName asSymbol ifAbsent: [ Object ].
+		builder := ShiftClassBuilder new.
+		existing
+			ifNil: [ builder name: className asSymbol ]
+			ifNotNil: [ builder fillFor: existing ].
+		builder superclass: superclass.
+		builder slotsFromString: (self joinTokens: instVars).
+		builder sharedVariables: (self joinTokens: classVars) asClassVariableCollection.
+		builder classSlots: (self joinTokens: classInstVars) asSlotCollection.
+		builder package: package asSymbol.
+		tag ifNotNil: [ builder tag: tag asSymbol ].
+		cls := builder install.
+		Dictionary new
+			at: 'class_name' put: cls name asString;
+			at: 'created' put: existing isNil;
+			yourself ]
+]
+
+{ #category : '*Sis-Bridge-Extras' }
+SisServer >> coerceBoolean: aValue [
+	"Accept booleans as JSON true/false, or 'true'/'false'/'1'/'0'/1/0."
+	aValue = true ifTrue: [ ^ true ].
+	aValue = false ifTrue: [ ^ false ].
+	aValue isString ifTrue: [
+		| normalised |
+		normalised := aValue asString asLowercase trimBoth.
+		(#('true' '1' 'yes') includes: normalised) ifTrue: [ ^ true ].
+		(#('false' '0' 'no' '') includes: normalised) ifTrue: [ ^ false ] ].
+	aValue isNumber ifTrue: [ ^ aValue ~= 0 ].
+	^ false
+]
+
+{ #category : '*Sis-Bridge-Extras' }
+SisServer >> joinTokens: aCollection [
+	"Return aCollection's elements joined by single spaces, skipping
+	falsy / empty entries. Matches `ShiftClassBuilder slotsFromString:'
+	expectations for empty slots."
+	^ String streamContents: [ :s |
+		| first |
+		first := true.
+		aCollection do: [ :each |
+			| token |
+			token := each ifNil: [ '' ] ifNotNil: [ each asString trimBoth ].
+			token isEmpty ifFalse: [
+				first ifFalse: [ s nextPut: Character space ].
+				s nextPutAll: token.
+				first := false ] ] ]
 ]

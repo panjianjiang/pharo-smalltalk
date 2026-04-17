@@ -563,6 +563,58 @@ line so navigation can recover the ref for drill-down."
       (should (equal (plist-get captured :params)
                      '((inspect . "true")))))))
 
+(ert-deftest pharo-smalltalk-compile-method-posts-structured-payload ()
+  "`pharo-smalltalk-compile-method' should hit /compile-method with the
+structured payload and return the `selector' field verbatim."
+  (let (captured)
+    (cl-letf (((symbol-function 'pharo-smalltalk--request)
+               (lambda (endpoint &rest kwargs)
+                 (setq captured (cons endpoint kwargs))
+                 '((success . t)
+                   (result . ((selector . "doubled:")
+                              (class_name . "Demo")
+                              (is_class_method . :json-false)
+                              (category . "math")))))))
+      (should (equal (pharo-smalltalk-compile-method "Demo" "instance" "math"
+                                                    "doubled: x\n\t^ x * 2")
+                     "doubled:"))
+      (should (equal (car captured) "/compile-method"))
+      (should (equal (plist-get (cdr captured) :type) "POST"))
+      (let ((data (plist-get (cdr captured) :data)))
+        (should (equal (alist-get 'class_name data) "Demo"))
+        (should (equal (alist-get 'is_class_method data) "false"))
+        (should (equal (alist-get 'category data) "math"))
+        (should (equal (alist-get 'method_source data)
+                       "doubled: x\n\t^ x * 2"))))))
+
+(ert-deftest pharo-smalltalk-compile-method-passes-class-side-flag ()
+  (let (captured)
+    (cl-letf (((symbol-function 'pharo-smalltalk--request)
+               (lambda (_endpoint &rest kwargs)
+                 (setq captured kwargs)
+                 '((success . t) (result . ((selector . "answer")))))))
+      (pharo-smalltalk-compile-method "Demo" "class" "factory" "answer\n\t^ 42")
+      (should (equal (alist-get 'is_class_method (plist-get captured :data))
+                     "true")))))
+
+(ert-deftest pharo-smalltalk-compile-class-definition-posts-structured-payload ()
+  "Tonel class source is parsed client-side and submitted as structured
+JSON; arrays go through as JSON arrays, not Smalltalk string fragments."
+  (let (captured)
+    (cl-letf (((symbol-function 'pharo-smalltalk--request)
+               (lambda (endpoint &rest kwargs)
+                 (setq captured (cons endpoint kwargs))
+                 '((success . t) (result . ((class_name . "Demo") (created . t)))))))
+      (pharo-smalltalk-compile-class-definition
+       "Class {\n\t#name : 'Demo',\n\t#superclass : 'Object',\n\t#instVars : [ 'a' 'b' ],\n\t#package : 'Codex-Demo'\n}")
+      (should (equal (car captured) "/compile-class"))
+      (let ((data (plist-get (cdr captured) :data)))
+        (should (equal (alist-get 'class_name data) "Demo"))
+        (should (equal (alist-get 'superclass data) "Object"))
+        (should (equal (alist-get 'package data) "Codex-Demo"))
+        (should (equal (alist-get 'inst_vars data) ["a" "b"]))
+        (should (vectorp (alist-get 'class_vars data)))))))
+
 (ert-deftest pharo-smalltalk-transcript-append-writes-text-and-seq ()
   "Appending a payload inserts its text, advances the seq cursor, and
 emits a drop notice when the server reports dropped entries."
