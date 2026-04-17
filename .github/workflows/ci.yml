@@ -40,7 +40,7 @@ jobs:
             -f ert-run-tests-batch-and-exit
 
   lint:
-    name: checkdoc + package-lint
+    name: package-lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -49,41 +49,18 @@ jobs:
           version: '29.4'
       - name: Install package-lint
         run: |
-          emacs --batch -Q \
-            --eval "(progn (require 'package) \
-                           (add-to-list 'package-archives '(\"melpa\" . \"https://melpa.org/packages/\")) \
-                           (package-initialize) \
-                           (package-refresh-contents) \
-                           (package-install 'package-lint))"
-      - name: checkdoc
-        run: |
           emacs --batch -Q --eval "(progn \
-            (require 'checkdoc) \
-            (let ((had-errors nil)) \
-              (dolist (f (file-expand-wildcards \"pharo-smalltalk*.el\")) \
-                (with-current-buffer (find-file-noselect f) \
-                  (let ((checkdoc-diagnostic-buffer \"*checkdoc*\")) \
-                    (checkdoc-current-buffer t) \
-                    (when-let ((buf (get-buffer checkdoc-diagnostic-buffer))) \
-                      (with-current-buffer buf \
-                        (when (> (buffer-size) 0) \
-                          (setq had-errors t) \
-                          (princ (format \"--- %s ---\n%s\n\" f (buffer-string))))))))) \
-              (when had-errors (kill-emacs 1))))"
-      - name: package-lint (main file)
+            (require 'package) \
+            (add-to-list 'package-archives \
+              '(\"melpa\" . \"https://melpa.org/packages/\")) \
+            (package-initialize) \
+            (package-refresh-contents) \
+            (package-install 'package-lint))"
+      - name: Lint main package file
         run: |
-          emacs --batch -Q -L ~/.emacs.d/elpa \
-            --eval "(let ((default-directory user-emacs-directory)) \
+          emacs --batch -Q -L . \
+            --eval "(let ((default-directory (expand-file-name \"~/.emacs.d/elpa/\"))) \
                      (normal-top-level-add-subdirs-to-load-path))" \
             -l package-lint \
-            --eval "(let ((files (file-expand-wildcards \"pharo-smalltalk*.el\")) \
-                          (had-errors nil)) \
-                     (dolist (f files) \
-                       (let ((default-directory (file-name-directory (expand-file-name f)))) \
-                         (with-current-buffer (find-file-noselect f) \
-                           (let ((errors (package-lint-buffer))) \
-                             (when errors \
-                               (setq had-errors t) \
-                               (princ (format \"--- %s ---\n\" f)) \
-                               (dolist (e errors) (princ (format \"  %S\n\" e)))))))) \
-                     (when had-errors (kill-emacs 1)))"
+            -f package-lint-batch-and-exit \
+            pharo-smalltalk.el

@@ -30,8 +30,11 @@
       (should (search-forward "define-package" nil t)))))
 
 (ert-deftest pharo-smalltalk-package-doc-files-exist ()
-  (should (file-exists-p "/home/panjj/.emacs.d/lisp/CHANGELOG.md"))
-  (should (file-exists-p "/home/panjj/.emacs.d/lisp/LICENSE")))
+  (let* ((lib (locate-library "pharo-smalltalk"))
+         (dir (and lib (file-name-directory lib))))
+    (should dir)
+    (should (file-exists-p (expand-file-name "CHANGELOG.md" dir)))
+    (should (file-exists-p (expand-file-name "LICENSE" dir)))))
 
 (ert-deftest pharo-smalltalk-install-registers-package-defaults ()
   (let ((pharo-smalltalk--installed-p nil)

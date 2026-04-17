@@ -310,13 +310,13 @@ the lookup asynchronously and invokes CALLBACK when the response arrives."
       (let ((cached (pharo-smalltalk-capf--cache-lookup
                      pharo-smalltalk-capf--class-comment-cache sym)))
         (if cached
-            (when-let ((args (pharo-smalltalk-capf--eldoc-class-comment-text
+            (when-let* ((args (pharo-smalltalk-capf--eldoc-class-comment-text
                               sym cached)))
               (apply callback args))
           (pharo-smalltalk-capf--fetch-class-comment-async
            sym
            (lambda (comment)
-             (when-let ((args (pharo-smalltalk-capf--eldoc-class-comment-text
+             (when-let* ((args (pharo-smalltalk-capf--eldoc-class-comment-text
                                sym comment)))
                (apply callback args))))))
       t)
@@ -330,13 +330,13 @@ the lookup asynchronously and invokes CALLBACK when the response arrives."
              (cached (pharo-smalltalk-capf--cache-lookup
                       pharo-smalltalk-capf--method-source-cache key)))
         (if cached
-            (when-let ((args (pharo-smalltalk-capf--eldoc-method-text
+            (when-let* ((args (pharo-smalltalk-capf--eldoc-method-text
                               class side sym cached)))
               (apply callback args))
           (pharo-smalltalk-capf--fetch-method-source-async
            class sym side
            (lambda (src)
-             (when-let ((args (pharo-smalltalk-capf--eldoc-method-text
+             (when-let* ((args (pharo-smalltalk-capf--eldoc-method-text
                                class side sym src)))
                (apply callback args))))))
       t)

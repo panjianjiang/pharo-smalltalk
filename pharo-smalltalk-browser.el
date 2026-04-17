@@ -38,7 +38,7 @@
 (defun pharo-smalltalk-browser-back ()
   "Go back one level in the browser."
   (interactive)
-  (if-let ((frame (pop pharo-smalltalk-browser--stack)))
+  (if-let* ((frame (pop pharo-smalltalk-browser--stack)))
       (progn
         (pharo-smalltalk-browser--render (car frame))
         (goto-char (point-min))
