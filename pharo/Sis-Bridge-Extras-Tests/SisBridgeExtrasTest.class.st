@@ -47,6 +47,20 @@ SisBridgeExtrasTest >> ensureDemoClassAbsent [
 		ifNotNil: [ :pkg | pkg removeFromSystem ]
 ]
 
+{ #category : 'private' }
+SisBridgeExtrasTest >> removeMethodResponseFor: aDictionary [
+	^ SisServer current
+		handleRemoveMethod:
+			(SisBridgeExtrasTestRequest withJson: (NeoJSONWriter toString: aDictionary))
+]
+
+{ #category : 'private' }
+SisBridgeExtrasTest >> removeClassResponseFor: aDictionary [
+	^ SisServer current
+		handleRemoveClass:
+			(SisBridgeExtrasTestRequest withJson: (NeoJSONWriter toString: aDictionary))
+]
+
 { #category : 'tests' }
 SisBridgeExtrasTest >> testAssociationSerializesAsOneEntryMap [
 	self
@@ -191,6 +205,154 @@ SisBridgeExtrasTest >> testCompileMethodDefinesClassSideWhenFlagIsTrue [
 		self assert: (cls class canUnderstand: #answer).
 		self deny: (cls canUnderstand: #answer)
 	] ensure: [ self ensureDemoClassAbsent ]
+]
+
+{ #category : 'tests' }
+SisBridgeExtrasTest >> testCompileMethodFirstCompileReportsOverwrittenFalse [
+	| resp |
+	self ensureDemoClassAbsent.
+	[
+		self compileClassResponseFor: (Dictionary new
+			at: #class_name put: 'SisCompileApiDemo';
+			at: #superclass put: 'Object';
+			at: #package put: 'Sis-Compile-Api-Demo';
+			at: #inst_vars put: #('a');
+			yourself).
+		resp := self compileMethodResponseFor: (Dictionary new
+			at: #class_name put: 'SisCompileApiDemo';
+			at: #method_source put: 'a	^ a';
+			yourself).
+		self deny: ((resp at: #result) at: 'overwritten').
+		self deny: ((resp at: #result) includesKey: 'previous_source')
+	] ensure: [ self ensureDemoClassAbsent ]
+]
+
+{ #category : 'tests' }
+SisBridgeExtrasTest >> testCompileMethodOverwriteCarriesPreviousSource [
+	| first second |
+	self ensureDemoClassAbsent.
+	[
+		self compileClassResponseFor: (Dictionary new
+			at: #class_name put: 'SisCompileApiDemo';
+			at: #superclass put: 'Object';
+			at: #package put: 'Sis-Compile-Api-Demo';
+			at: #inst_vars put: #('a');
+			yourself).
+		first := self compileMethodResponseFor: (Dictionary new
+			at: #class_name put: 'SisCompileApiDemo';
+			at: #method_source put: 'a	^ 1';
+			yourself).
+		second := self compileMethodResponseFor: (Dictionary new
+			at: #class_name put: 'SisCompileApiDemo';
+			at: #method_source put: 'a	^ 2';
+			yourself).
+		self deny: ((first at: #result) at: 'overwritten').
+		self assert: ((second at: #result) at: 'overwritten').
+		self assert: ((second at: #result) at: 'previous_source')
+			equals: 'a	^ 1'
+	] ensure: [ self ensureDemoClassAbsent ]
+]
+
+{ #category : 'tests' }
+SisBridgeExtrasTest >> testCompileMethodSyntaxErrorCarriesLineAndColumn [
+	| resp err |
+	self ensureDemoClassAbsent.
+	[
+		self compileClassResponseFor: (Dictionary new
+			at: #class_name put: 'SisCompileApiDemo';
+			at: #superclass put: 'Object';
+			at: #package put: 'Sis-Compile-Api-Demo';
+			yourself).
+		resp := self compileMethodResponseFor: (Dictionary new
+			at: #class_name put: 'SisCompileApiDemo';
+			at: #method_source put: 'broken
+	^ x @@@';
+			yourself).
+		self deny: (resp at: #success).
+		err := resp at: #error.
+		self assert: ((err at: 'source') includesSubstring: '@@@').
+		self assert: (err at: 'line') equals: 2.
+		self assert: (err at: 'column') > 0.
+		self assert: (err at: 'location') isInteger.
+		self assert: ((err at: 'message_text') isString)
+	] ensure: [ self ensureDemoClassAbsent ]
+]
+
+{ #category : 'tests' }
+SisBridgeExtrasTest >> testRemoveMethodRemovesExistingSelector [
+	| resp |
+	self ensureDemoClassAbsent.
+	[
+		self compileClassResponseFor: (Dictionary new
+			at: #class_name put: 'SisCompileApiDemo';
+			at: #superclass put: 'Object';
+			at: #package put: 'Sis-Compile-Api-Demo';
+			yourself).
+		self compileMethodResponseFor: (Dictionary new
+			at: #class_name put: 'SisCompileApiDemo';
+			at: #method_source put: 'noop	^ self';
+			yourself).
+		resp := self removeMethodResponseFor: (Dictionary new
+			at: #class_name put: 'SisCompileApiDemo';
+			at: #selector put: 'noop';
+			yourself).
+		self assert: ((resp at: #result) at: 'existed').
+		self assert: ((resp at: #result) at: 'removed').
+		self deny:
+			((Smalltalk globals at: #SisCompileApiDemo)
+				canUnderstand: #noop)
+	] ensure: [ self ensureDemoClassAbsent ]
+]
+
+{ #category : 'tests' }
+SisBridgeExtrasTest >> testRemoveMethodIsNoOpWhenSelectorMissing [
+	| resp |
+	self ensureDemoClassAbsent.
+	[
+		self compileClassResponseFor: (Dictionary new
+			at: #class_name put: 'SisCompileApiDemo';
+			at: #superclass put: 'Object';
+			at: #package put: 'Sis-Compile-Api-Demo';
+			yourself).
+		resp := self removeMethodResponseFor: (Dictionary new
+			at: #class_name put: 'SisCompileApiDemo';
+			at: #selector put: 'doesNotExist';
+			yourself).
+		self deny: ((resp at: #result) at: 'existed').
+		self deny: ((resp at: #result) at: 'removed')
+	] ensure: [ self ensureDemoClassAbsent ]
+]
+
+{ #category : 'tests' }
+SisBridgeExtrasTest >> testRemoveMethodIsNoOpWhenClassMissing [
+	| resp |
+	self ensureDemoClassAbsent.
+	resp := self removeMethodResponseFor: (Dictionary new
+		at: #class_name put: 'SisCompileApiDemo';
+		at: #selector put: 'doesNotExist';
+		yourself).
+	self deny: ((resp at: #result) at: 'existed').
+	self deny: ((resp at: #result) at: 'removed')
+]
+
+{ #category : 'tests' }
+SisBridgeExtrasTest >> testRemoveClassRoundTrip [
+	| first second |
+	self ensureDemoClassAbsent.
+	self compileClassResponseFor: (Dictionary new
+		at: #class_name put: 'SisCompileApiDemo';
+		at: #superclass put: 'Object';
+		at: #package put: 'Sis-Compile-Api-Demo';
+		yourself).
+	first := self removeClassResponseFor: (Dictionary new
+		at: #class_name put: 'SisCompileApiDemo'; yourself).
+	second := self removeClassResponseFor: (Dictionary new
+		at: #class_name put: 'SisCompileApiDemo'; yourself).
+	self assert: ((first at: #result) at: 'removed').
+	self assert: ((first at: #result) at: 'existed').
+	self deny: ((second at: #result) at: 'existed').
+	self deny: ((second at: #result) at: 'removed').
+	self ensureDemoClassAbsent
 ]
 
 { #category : 'tests' }

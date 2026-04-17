@@ -111,22 +111,158 @@ SisServer >> handleCompileMethod: request [
 		method_source    (required, String — the full Smalltalk source)
 		category         (optional, String, defaults to 'as yet unclassified')
 		is_class_method  (optional, Boolean or 'true'/'false')
-	Returns {selector, class_name, is_class_method, category}."
+	Success response: {selector, class_name, is_class_method, category,
+	overwritten, previous_source}.  On syntax error, `success' is false
+	and `error' carries {description, message_text, source, class_name,
+	is_class_method, location?, line?, column?}."
+	| json className isClassSide source category target priorSource
+	  selector result |
+	json := NeoJSONReader fromString: request entity contents.
+	className := json at: #class_name.
+	source := json at: #method_source.
+	category := json at: #category ifAbsent: [ 'as yet unclassified' ].
+	isClassSide := self coerceBoolean: (json at: #is_class_method ifAbsent: [ false ]).
+	target := Smalltalk globals at: className asSymbol.
+	isClassSide ifTrue: [ target := target class ].
+	priorSource := self priorSourceFor: source on: target.
+	[ selector := target compile: source classified: category ]
+		on: Error
+		do: [ :err |
+			^ Dictionary new
+				at: 'success' put: false;
+				at: 'error' put: (self compileErrorInfoFor: err source: source
+					className: className isClassSide: isClassSide);
+				yourself ].
+	result := Dictionary new
+		at: 'selector' put: selector asString;
+		at: 'class_name' put: className;
+		at: 'is_class_method' put: isClassSide;
+		at: 'category' put: category;
+		at: 'overwritten' put: priorSource notNil;
+		yourself.
+	priorSource ifNotNil: [ result at: 'previous_source' put: priorSource ].
+	^ Dictionary new
+		at: 'success' put: true;
+		at: 'result' put: result;
+		yourself
+]
+
+{ #category : '*Sis-Bridge-Extras' }
+SisServer >> priorSourceFor: source on: target [
+	"Return the existing source code for source's selector on target,
+	or nil when the selector is new or the source is unparsable.
+	Uses RBParser so this never mutates the image."
+	^ [ | ast selector |
+		ast := RBParser parseMethod: source.
+		selector := ast selector.
+		(target includesSelector: selector)
+			ifTrue: [ target sourceCodeAt: selector ]
+			ifFalse: [ nil ] ]
+		on: Error do: [ :e | nil ]
+]
+
+{ #category : '*Sis-Bridge-Extras' }
+SisServer >> compileErrorInfoFor: err source: source className: className isClassSide: isClassSide [
+	"Build an error dictionary for a compile failure, annotated with the
+	offending offset and computed line/column when available."
+	| info notice node location position messageText |
+	info := Dictionary new.
+	info at: 'description' put: err description.
+	info at: 'source' put: source.
+	info at: 'class_name' put: className.
+	info at: 'is_class_method' put: isClassSide.
+	notice := [ (err respondsTo: #notice) ifTrue: [ err notice ] ifFalse: [ nil ] ]
+		on: Error do: [ :e | nil ].
+	messageText := notice
+		ifNotNil: [ [ notice messageText ] on: Error do: [ :e | err messageText ] ]
+		ifNil: [ [ err messageText ] on: Error do: [ :e | err description ] ].
+	info at: 'message_text' put: messageText.
+	node := [ notice ifNotNil: [ notice node ] ] on: Error do: [ :e | nil ].
+	location := [ node ifNotNil: [ node start ] ] on: Error do: [ :e | nil ].
+	location ifNotNil: [
+		info at: 'location' put: location.
+		position := self lineColumnIn: source offset: location.
+		info at: 'line' put: position first.
+		info at: 'column' put: position second ].
+	^ info
+]
+
+{ #category : '*Sis-Bridge-Extras' }
+SisServer >> lineColumnIn: aString offset: anOffset [
+	"Return (line, column), both 1-based, for the 1-based character
+	offset anOffset into aString. Treat CR, LF, and CRLF as line breaks."
+	| line lineStart maxIndex col char nextChar |
+	line := 1.
+	lineStart := 1.
+	maxIndex := (anOffset - 1) min: aString size.
+	1 to: maxIndex do: [ :i |
+		char := aString at: i.
+		((char = Character cr)
+			or: [
+				char = Character lf
+					and: [ i = 1 or: [ (aString at: i - 1) ~= Character cr ] ] ])
+			ifTrue: [
+			line := line + 1.
+			nextChar := (i < aString size) ifTrue: [ aString at: i + 1 ] ifFalse: [ nil ].
+			lineStart := (char = Character cr and: [ nextChar = Character lf ])
+				ifTrue: [ i + 2 ]
+				ifFalse: [ i + 1 ] ] ].
+	col := (anOffset - lineStart + 1) max: 1.
+	^ { line. col }
+]
+
+{ #category : '*Sis-Bridge-Extras' }
+SisServer >> handleRemoveMethod: request [
+	"Remove a method from a class or its metaclass.  Body JSON keys:
+		class_name       (required)
+		selector         (required)
+		is_class_method  (optional, Boolean / 'true'|'false')
+	Returns {class_name, selector, is_class_method, existed, removed}.
+	`existed=false' when the class or selector was not defined; no error raised."
 	^ self returnResultDo: [
-		| json className isClassSide source category target selector |
+		| json className selector isClassSide target existed |
 		json := NeoJSONReader fromString: request entity contents.
 		className := json at: #class_name.
-		source := json at: #method_source.
-		category := json at: #category ifAbsent: [ 'as yet unclassified' ].
+		selector := (json at: #selector) asSymbol.
 		isClassSide := self coerceBoolean: (json at: #is_class_method ifAbsent: [ false ]).
-		target := Smalltalk globals at: className asSymbol.
-		isClassSide ifTrue: [ target := target class ].
-		selector := target compile: source classified: category.
+		target := Smalltalk globals at: className asSymbol ifAbsent: [ nil ].
+		target
+			ifNil: [
+				Dictionary new
+					at: 'class_name' put: className;
+					at: 'selector' put: selector asString;
+					at: 'is_class_method' put: isClassSide;
+					at: 'existed' put: false;
+					at: 'removed' put: false;
+					yourself ]
+			ifNotNil: [
+				isClassSide ifTrue: [ target := target class ].
+				existed := target includesSelector: selector.
+				existed ifTrue: [ target removeSelector: selector ].
+				Dictionary new
+					at: 'class_name' put: className;
+					at: 'selector' put: selector asString;
+					at: 'is_class_method' put: isClassSide;
+					at: 'existed' put: existed;
+					at: 'removed' put: existed;
+					yourself ] ]
+]
+
+{ #category : '*Sis-Bridge-Extras' }
+SisServer >> handleRemoveClass: request [
+	"Remove a class from the image. Body JSON key: class_name.
+	Returns {class_name, existed, removed}. Missing class is a no-op
+	reported as existed=false."
+	^ self returnResultDo: [
+		| json className existing |
+		json := NeoJSONReader fromString: request entity contents.
+		className := json at: #class_name.
+		existing := Smalltalk globals at: className asSymbol ifAbsent: [ nil ].
+		existing ifNotNil: [ existing removeFromSystem ].
 		Dictionary new
-			at: 'selector' put: selector asString;
 			at: 'class_name' put: className;
-			at: 'is_class_method' put: isClassSide;
-			at: 'category' put: category;
+			at: 'existed' put: existing notNil;
+			at: 'removed' put: existing notNil;
 			yourself ]
 ]
 

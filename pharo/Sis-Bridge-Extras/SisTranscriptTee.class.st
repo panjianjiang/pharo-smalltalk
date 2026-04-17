@@ -30,7 +30,9 @@ SisTranscriptTee class >> ensureExtraRoutesOn: aSisServer [
 		GET: '/transcript/poll' -> [ :req | aSisServer handleTranscriptPoll: req ];
 		POST: '/transcript/clear' -> [ :req | aSisServer handleTranscriptClear: req ];
 		POST: '/compile-method' -> [ :req | aSisServer handleCompileMethod: req ];
-		POST: '/compile-class' -> [ :req | aSisServer handleCompileClass: req ].
+		POST: '/compile-class' -> [ :req | aSisServer handleCompileClass: req ];
+		POST: '/remove-method' -> [ :req | aSisServer handleRemoveMethod: req ];
+		POST: '/remove-class' -> [ :req | aSisServer handleRemoveClass: req ].
 	"Inspector routes plug in only when Sis-Inspector has been loaded;
 	Sis-Bridge-Extras alone remains useful without them."
 	(Smalltalk globals includesKey: #SisInspector) ifTrue: [
