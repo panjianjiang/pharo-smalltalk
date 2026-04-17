@@ -184,7 +184,7 @@
        (pharo-smalltalk-browser--render-classes (aref entry 0)))
       (`(classes ,_pkg)
        (pharo-smalltalk-browser--render-methods (aref entry 0) 'instance))
-      (`(methods ,class ,side)
+      (`(methods ,_class ,_side)
        (let ((spec (tabulated-list-get-id)))
          (pharo-smalltalk-browser--render-source
           (pharo-smalltalk-method-spec-class-name spec)

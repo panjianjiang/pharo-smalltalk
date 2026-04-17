@@ -14,6 +14,7 @@
 (require 'pharo-smalltalk-xref)
 (require 'pharo-smalltalk-capf)
 (require 'pharo-smalltalk-test)
+(require 'pharo-smalltalk-browser)
 
 (ert-deftest pharo-smalltalk-package-metadata-is-available ()
   (should (string-match-p "\\`[0-9]+\\.[0-9]+\\.[0-9]+\\'"
