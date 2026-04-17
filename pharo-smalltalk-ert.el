@@ -36,6 +36,18 @@
     (should (file-exists-p (expand-file-name "CHANGELOG.md" dir)))
     (should (file-exists-p (expand-file-name "LICENSE" dir)))))
 
+(ert-deftest pharo-smalltalk-method-spec-normalizers-work ()
+  (let ((hit (pharo-smalltalk-method-spec-from-server-hit
+              "DemoClass class" "answer" "accessing")))
+    (should (equal (pharo-smalltalk-method-spec-class-name hit) "DemoClass"))
+    (should (equal (pharo-smalltalk-method-spec-selector hit) "answer"))
+    (should (pharo-smalltalk-method-spec-class-side-p hit))
+    (should (equal (pharo-smalltalk-method-spec-category hit) "accessing"))
+    (should (equal (pharo-smalltalk-method-spec-key hit)
+                   '("DemoClass" "answer" t)))
+    (should (equal (pharo-smalltalk-method-spec-display-name hit)
+                   "DemoClass class>>answer"))))
+
 (ert-deftest pharo-smalltalk-install-registers-package-defaults ()
   (let ((pharo-smalltalk--installed-p nil)
         (pharo-smalltalk-package-modules '(browser))
@@ -272,6 +284,21 @@
                                "accessing")))))
         (when (get-buffer pharo-smalltalk-browser-buffer-name)
           (kill-buffer pharo-smalltalk-browser-buffer-name))))))
+
+(ert-deftest pharo-smalltalk-capf-receiver-spec-uses-buffer-context ()
+  (with-temp-buffer
+    (pharo-smalltalk-mode)
+    (setq-local pharo-smalltalk-buffer-class-name "DemoClass")
+    (setq-local pharo-smalltalk-buffer-class-side-p t)
+    (insert "self value")
+    (goto-char (point-max))
+    (let ((spec (pharo-smalltalk-capf--receiver-spec
+                 (save-excursion
+                   (search-backward "value")
+                   (point)))))
+      (should (pharo-smalltalk-method-spec-p spec))
+      (should (equal (pharo-smalltalk-method-spec-class-name spec) "DemoClass"))
+      (should (pharo-smalltalk-method-spec-class-side-p spec)))))
 
 (ert-deftest pharo-smalltalk-test-parse-summary-handles-singular-plural ()
   (should

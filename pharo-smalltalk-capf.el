@@ -132,9 +132,9 @@ completion poll (typically the next keystroke) will hit warm data."
         (when (< start end)
           (cons (buffer-substring-no-properties start end) start))))))
 
-(defun pharo-smalltalk-capf--receiver-class (beg)
+(defun pharo-smalltalk-capf--receiver-spec (beg)
   "Try to resolve the static class of the receiver immediately before BEG.
-Returns (CLASS-NAME . CLASS-SIDE-P) or nil when unknown.
+Returns a method spec without selector/category, or nil when unknown.
 
 Cases handled (textual heuristics, no AST round-trip):
  * `self foo'  in a method buffer with known class  → buffer class, same side
@@ -146,29 +146,36 @@ Cases handled (textual heuristics, no AST round-trip):
       (let ((token (car tok)) (start (cdr tok)))
         (cond
          ((member token '("self" "super"))
-          (when pharo-smalltalk-buffer-class-name
-            (cons pharo-smalltalk-buffer-class-name
-                  pharo-smalltalk-buffer-class-side-p)))
+          (pharo-smalltalk-method-spec-from-buffer))
          ;; Capitalized identifier → class literal, class side.
          ((and (> (length token) 0) (<= ?A (aref token 0) ?Z))
-          (cons token t))
+          (pharo-smalltalk-method-spec-create
+           :class-name token
+           :class-side-p t))
          ;; `Class new' pattern → instance side of that class.
          ((string= token "new")
           (let ((prev (pharo-smalltalk-capf--token-before start)))
             (when (and prev (> (length (car prev)) 0)
                        (<= ?A (aref (car prev) 0) ?Z))
-              (cons (car prev) nil)))))))))
+              (pharo-smalltalk-method-spec-create
+               :class-name (car prev)
+               :class-side-p nil)))))))))
 
-(defun pharo-smalltalk-capf--class-selector-table (class-name class-side-p)
-  "Return a completion table of CLASS-NAME's selectors (subject to side)."
+(defun pharo-smalltalk-capf--class-selector-table (spec)
+  "Return a completion table of SPEC's class selectors."
   (let ((selectors
          (condition-case err
-             (pharo-smalltalk-class-selectors class-name class-side-p)
+             (pharo-smalltalk-class-selectors
+              (pharo-smalltalk-method-spec-class-name spec)
+              (pharo-smalltalk-method-spec-class-side-p spec))
            (error
             (pharo-smalltalk--warn-once
-             (list 'capf-class-selectors class-name class-side-p)
+             (list 'capf-class-selectors
+                   (pharo-smalltalk-method-spec-class-name spec)
+                   (pharo-smalltalk-method-spec-class-side-p spec))
              "class-selectors %s%s failed: %s"
-             class-name (if class-side-p " class" "")
+             (pharo-smalltalk-method-spec-class-name spec)
+             (if (pharo-smalltalk-method-spec-class-side-p spec) " class" "")
              (error-message-string err))
             nil))))
     (and selectors (sort (copy-sequence selectors) #'string<))))
@@ -184,19 +191,21 @@ class-name / selector search by prefix shape."
             (class-like (and first-char (<= ?A first-char ?Z))))
        (when (>= (length prefix) pharo-smalltalk-capf-min-prefix)
          (let ((receiver (and (not class-like)
-                              (pharo-smalltalk-capf--receiver-class beg))))
+                              (pharo-smalltalk-capf--receiver-spec beg))))
            (cond
             ;; Receiver resolved → narrow selector candidates to that class.
             (receiver
-             (let* ((cls (car receiver))
-                    (side (cdr receiver))
-                    (table (pharo-smalltalk-capf--class-selector-table cls side)))
+             (let ((table (pharo-smalltalk-capf--class-selector-table receiver)))
                (when table
                  (list beg end table
                        :exclusive 'no
                        :annotation-function
                        (lambda (_)
-                         (format " [%s%s]" cls (if side " class" "")))))))
+                         (format " [%s%s]"
+                                 (pharo-smalltalk-method-spec-class-name receiver)
+                                 (if (pharo-smalltalk-method-spec-class-side-p receiver)
+                                     " class"
+                                   "")))))))
             ;; Class-like prefix → all class names.
             (class-like
              (list beg end
@@ -294,21 +303,31 @@ symbol deliver nil to release eldoc without showing stale text."
        ((and (> (length sym) 0)
              (or (string-match-p ":" sym)
                  (<= ?a (aref sym 0) ?z)))
-        (let* ((class (or pharo-smalltalk-buffer-class-name "Object"))
-               (side pharo-smalltalk-buffer-class-side-p)
-               (key (list class sym (and side t)))
+        (let* ((spec (or (pharo-smalltalk-method-spec-from-buffer sym)
+                         (pharo-smalltalk-method-spec-create
+                          :class-name "Object"
+                          :selector sym
+                          :class-side-p nil)))
+               (key (pharo-smalltalk-method-spec-key spec))
                (cached (pharo-smalltalk--source-cache-lookup
                         pharo-smalltalk--method-source-cache key)))
           (if cached
               (pharo-smalltalk-capf--eldoc-deliver
                callback
-               (pharo-smalltalk-capf--eldoc-method-text class side sym cached))
+               (pharo-smalltalk-capf--eldoc-method-text
+                (pharo-smalltalk-method-spec-class-name spec)
+                (pharo-smalltalk-method-spec-class-side-p spec)
+                sym cached))
             (pharo-smalltalk-get-method-source-async
-             class sym side
+             (pharo-smalltalk-method-spec-class-name spec)
+             sym
+             (pharo-smalltalk-method-spec-class-side-p spec)
              (lambda (src)
                (deliver-when-current
                 (pharo-smalltalk-capf--eldoc-method-text
-                 class side sym src))))))
+                 (pharo-smalltalk-method-spec-class-name spec)
+                 (pharo-smalltalk-method-spec-class-side-p spec)
+                 sym src))))))
         t)
        (t nil)))))
 

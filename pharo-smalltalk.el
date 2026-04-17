@@ -165,12 +165,43 @@ Known values include `workspace', `method', `class-definition', `class-source'."
   "Return SPEC's side as `class' or `instance'."
   (if (pharo-smalltalk-method-spec-class-side-p spec) 'class 'instance))
 
+(defun pharo-smalltalk-method-spec-key (spec)
+  "Return SPEC's cache key."
+  (list (pharo-smalltalk-method-spec-class-name spec)
+        (pharo-smalltalk-method-spec-selector spec)
+        (and (pharo-smalltalk-method-spec-class-side-p spec) t)))
+
 (defun pharo-smalltalk-method-spec-display-name (spec)
   "Return a human-readable CLASS>>SELECTOR name for SPEC."
   (format "%s%s>>%s"
           (pharo-smalltalk-method-spec-class-name spec)
           (if (pharo-smalltalk-method-spec-class-side-p spec) " class" "")
           (pharo-smalltalk-method-spec-selector spec)))
+
+(defun pharo-smalltalk-method-spec-from-server-hit (class-name selector &optional category)
+  "Normalize a server HIT into a method spec.
+CLASS-NAME may include a trailing \" class\" suffix."
+  (let ((class-side-p (and class-name
+                           (string-match-p " class\\'" class-name)
+                           t)))
+    (pharo-smalltalk-method-spec-create
+     :class-name (if class-side-p
+                     (string-remove-suffix " class" class-name)
+                   class-name)
+     :selector selector
+     :class-side-p class-side-p
+     :category category)))
+
+(defun pharo-smalltalk-method-spec-from-buffer (&optional selector category)
+  "Build a method spec from the current buffer metadata.
+SELECTOR and CATEGORY override the buffer-local values when provided.
+Returns nil when the buffer does not target a known class."
+  (when pharo-smalltalk-buffer-class-name
+    (pharo-smalltalk-method-spec-create
+     :class-name pharo-smalltalk-buffer-class-name
+     :selector selector
+     :class-side-p (and pharo-smalltalk-buffer-class-side-p t)
+     :category (or category pharo-smalltalk-buffer-method-category))))
 
 (defvar pharo-smalltalk-font-lock-keywords
   '(("\\_<\\(self\\|super\\|true\\|false\\|nil\\|thisContext\\)\\_>" . font-lock-constant-face)

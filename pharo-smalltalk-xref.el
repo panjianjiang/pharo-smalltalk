@@ -138,15 +138,7 @@
 
 (defun pharo-smalltalk-xref--normalize-method-hit (class-name selector)
   "Normalize CLASS-NAME and SELECTOR from a server result into a method spec."
-  (let ((class-side-p (and class-name
-                           (string-match-p " class\\'" class-name)
-                           t)))
-    (pharo-smalltalk-method-spec-create
-     :class-name (if class-side-p
-                     (string-remove-suffix " class" class-name)
-                   class-name)
-     :selector selector
-     :class-side-p class-side-p)))
+  (pharo-smalltalk-method-spec-from-server-hit class-name selector))
 
 (defvar pharo-smalltalk-xref--lineage-cache (make-hash-table :test 'equal)
   "Cache of class lineage lists keyed by class name.")
