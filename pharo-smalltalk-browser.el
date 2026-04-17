@@ -42,8 +42,9 @@
     (user-error "Already at top of browser")))
 
 (defun pharo-smalltalk-browser-refresh ()
-  "Re-render the current view from the server."
+  "Re-render the current view from the server, bypassing local caches."
   (interactive)
+  (pharo-smalltalk--invalidate-browser-caches)
   (when pharo-smalltalk-browser--current
     (pharo-smalltalk-browser--render pharo-smalltalk-browser--current)))
 

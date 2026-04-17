@@ -8,6 +8,27 @@
 - Rewrite `README.md` as a full installation + usage manual.
 - Fix workspace `u` input (buffer-local keymap in browser source view).
 - Normalize Pharo CR line endings to LF when capturing Transcript output.
+- **Fix `:json-false` truthiness bug**: failed evals previously returned
+  nil silently; they now raise with the server-side error description.
+  Adds `pharo-smalltalk--success-p` predicate used by `--result`,
+  `--store-and-display`, `--unwrap-async`, and `show-last-result`.
+- **Browser caches**: TTL-cache `list-packages`, `list-classes`,
+  `list-extended-classes`, and `--class-protocols`. Cleared on the
+  mutation hook and on `g` in the browser. Eliminates per-keystroke
+  refetch stalls during browser drill-down.
+- **Async eldoc**: `pharo-smalltalk-capf--eldoc` no longer blocks Emacs
+  on cache miss — dispatches `--request-async` and fills via the
+  eldoc deferred callback. Class-comment cache added.
+- **Surface silent failures**: `pharo-smalltalk--warn-once` (rate-limited
+  `[pharo-smalltalk]` messages) replaces blanket `(error nil)` swallows
+  in `capf` / `eldoc`, so completion stoppages tell the user why.
+- **Per-action result buffers**: `--store-and-display` now writes to
+  `*Pharo <action>*` instead of a single shared buffer, so concurrent
+  searches don't clobber each other.
+- Remove ~30 stale `my/smalltalk-*` and unprefixed `pharo-*` aliases.
+- ERT suite expanded from 14 → 20 tests covering success-predicate,
+  failure-path raising, browser cache hit/invalidate, warn-once
+  throttling, and per-action buffer naming.
 
 ## 0.1.0 - 2026-04-16
 

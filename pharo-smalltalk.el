@@ -3,7 +3,7 @@
 ;; Version: 0.1.0
 ;; Package-Requires: ((emacs "29.1"))
 ;; Keywords: languages, tools, smalltalk
-;; URL: https://github.com/panjianjiang/pharo-smalltalk
+;; URL: https://github.com/panjianjiang
 
 ;;; Commentary:
 
@@ -26,7 +26,7 @@
 ;;
 ;; `lang-smalltalk.el' is a thin local wrapper for user-specific defaults.
 ;;
-;; See `README.md' for a concise usage summary.
+;; See `README-pharo-smalltalk.md' for a concise usage summary.
 ;;
 ;;; Code:
 
@@ -399,6 +399,23 @@ Chunks are separated by blank lines."
     (alist-get 'description err))
    (t (format "%S" err))))
 
+(defcustom pharo-smalltalk-warn-once-interval 10
+  "Minimum seconds between repeated `pharo-smalltalk--warn-once' messages
+sharing the same key."
+  :type 'integer
+  :group 'pharo-smalltalk)
+
+(defvar pharo-smalltalk--warn-suppress (make-hash-table :test 'equal)
+  "Map of warn-once key -> last emission timestamp.")
+
+(defun pharo-smalltalk--warn-once (key fmt &rest args)
+  "Emit a `[pharo-smalltalk]' message for KEY, throttled by interval."
+  (let ((now (float-time))
+        (last (gethash key pharo-smalltalk--warn-suppress 0)))
+    (when (> (- now last) pharo-smalltalk-warn-once-interval)
+      (puthash key now pharo-smalltalk--warn-suppress)
+      (apply #'message (concat "[pharo-smalltalk] " fmt) args))))
+
 (defun pharo-smalltalk--display-value (label value &optional buffer-name mode)
   "Display LABEL and VALUE in a dedicated buffer.
 BUFFER-NAME defaults to `pharo-smalltalk-result-buffer-name'.
@@ -545,7 +562,7 @@ Line endings are normalized from Pharo's CR to LF for Emacs display."
   (lambda (response error)
     (cond
      (error (funcall callback nil error))
-     ((alist-get 'success response)
+     ((pharo-smalltalk--success-p response)
       (let ((result (alist-get 'result response)))
         (setq pharo-smalltalk-last-response response
               pharo-smalltalk-last-result result)
@@ -560,11 +577,18 @@ Line endings are normalized from Pharo's CR to LF for Emacs display."
                     (alist-get 'message response)
                     response)))))))
 
+(defun pharo-smalltalk--success-p (response)
+  "Return non-nil iff RESPONSE indicates a successful Pharo call.
+JSON `false' is parsed as `:json-false' by `json-read', which would
+otherwise pass a naive truthiness check."
+  (let ((s (alist-get 'success response)))
+    (and s (not (eq s :json-false)) (not (eq s :false)))))
+
 (defun pharo-smalltalk--result (response)
   "Return RESPONSE result or raise a user-facing error."
   (setq pharo-smalltalk-last-response response)
   (pharo-smalltalk--extract-transcript response)
-  (if (alist-get 'success response)
+  (if (pharo-smalltalk--success-p response)
       (let ((result (alist-get 'result response)))
         (setq pharo-smalltalk-last-result result)
         result)
@@ -573,20 +597,27 @@ Line endings are normalized from Pharo's CR to LF for Emacs display."
                            response)))
       (error "Pharo error: %s" (pharo-smalltalk--format-error error-value)))))
 
+(defun pharo-smalltalk--action-buffer-name (action-name)
+  "Return a per-action result buffer name so concurrent searches don't clash."
+  (format "*Pharo %s*" action-name))
+
 (defun pharo-smalltalk--store-and-display (response label action-name)
-  "Store RESPONSE, display LABEL on success, and signal ACTION-NAME on failure."
+  "Store RESPONSE, display LABEL on success, and signal ACTION-NAME on failure.
+The result is shown in a buffer whose name is derived from ACTION-NAME so
+concurrent searches don't clobber each other."
   (setq pharo-smalltalk-last-response response)
   (pharo-smalltalk--extract-transcript response)
-  (if (alist-get 'success response)
-      (let ((result (alist-get 'result response)))
-        (setq pharo-smalltalk-last-result result)
-        (pharo-smalltalk--display-value label result)
-        result)
-    (let ((error-value (or (alist-get 'error response)
-                           (alist-get 'message response)
-                           response)))
-      (pharo-smalltalk--display-value "Error" error-value)
-      (error "Pharo %s failed: %s" action-name (pharo-smalltalk--format-error error-value)))))
+  (let ((buffer (pharo-smalltalk--action-buffer-name action-name)))
+    (if (pharo-smalltalk--success-p response)
+        (let ((result (alist-get 'result response)))
+          (setq pharo-smalltalk-last-result result)
+          (pharo-smalltalk--display-value label result buffer)
+          result)
+      (let ((error-value (or (alist-get 'error response)
+                             (alist-get 'message response)
+                             response)))
+        (pharo-smalltalk--display-value "Error" error-value buffer)
+        (error "Pharo %s failed: %s" action-name (pharo-smalltalk--format-error error-value))))))
 
 (defun pharo-smalltalk-eval (code)
   "Evaluate CODE through the Pharo server and return the result."
@@ -659,16 +690,27 @@ When the server captures Transcript output, prepend it to the echoed message."
                  result)
       (message "%s" result))))
 
-(defun pharo-smalltalk-list-packages ()
-  "Return the list of packages in the image."
-  (pharo-smalltalk--result
-   (pharo-smalltalk--request "/list-packages")))
+(defun pharo-smalltalk-list-packages (&optional force)
+  "Return the list of packages in the image, cached for TTL.
+With FORCE, bypass the cache."
+  (let ((cached pharo-smalltalk--packages-cache))
+    (if (and (not force) cached
+             (pharo-smalltalk--cache-fresh-p (cdr cached)))
+        (car cached)
+      (let ((fresh (pharo-smalltalk--result
+                    (pharo-smalltalk--request "/list-packages"))))
+        (setq pharo-smalltalk--packages-cache (cons fresh (float-time)))
+        fresh))))
 
 (defun pharo-smalltalk-list-classes (package-name)
-  "Return the classes of PACKAGE-NAME."
-  (pharo-smalltalk--result
-   (pharo-smalltalk--request "/list-classes"
-                             :params `((package_name . ,package-name)))))
+  "Return the classes of PACKAGE-NAME, cached per package."
+  (pharo-smalltalk--cache-get
+   pharo-smalltalk--classes-cache
+   package-name
+   (lambda ()
+     (pharo-smalltalk--result
+      (pharo-smalltalk--request "/list-classes"
+                                :params `((package_name . ,package-name)))))))
 
 (defun pharo-smalltalk-import-tonel-package (package-name path)
   "Import PACKAGE-NAME from Tonel PATH into Pharo."
@@ -789,10 +831,14 @@ When CLASS-SIDE-P is non-nil, fetch the class-side method."
    (pharo-smalltalk-get-class-comment class-name)))
 
 (defun pharo-smalltalk-list-extended-classes (package-name)
-  "Return classes extended (but not defined) by PACKAGE-NAME."
-  (pharo-smalltalk--result
-   (pharo-smalltalk--request "/list-extended-classes"
-                             :params `((package_name . ,package-name)))))
+  "Return classes extended (but not defined) by PACKAGE-NAME, cached per package."
+  (pharo-smalltalk--cache-get
+   pharo-smalltalk--extended-classes-cache
+   package-name
+   (lambda ()
+     (pharo-smalltalk--result
+      (pharo-smalltalk--request "/list-extended-classes"
+                                :params `((package_name . ,package-name)))))))
 
 (defun pharo-smalltalk-list-methods (package-name)
   "Return method records for PACKAGE-NAME."
@@ -889,7 +935,7 @@ When CLASS-SIDE-P is non-nil, fetch the class-side method."
   (interactive)
   (unless pharo-smalltalk-last-response
     (user-error "No Pharo result has been captured yet"))
-  (if (alist-get 'success pharo-smalltalk-last-response)
+  (if (pharo-smalltalk--success-p pharo-smalltalk-last-response)
       (pharo-smalltalk--display-value "Result" pharo-smalltalk-last-result)
     (pharo-smalltalk--display-value
      "Error"
@@ -914,24 +960,28 @@ When CLASS-SIDE-P is non-nil, fetch the class-side method."
      (car (split-string source "\n\n{ #category :" t)))))
 
 (defun pharo-smalltalk--class-protocols (class-name)
-  "Return class and instance protocols for CLASS-NAME."
-  (pharo-smalltalk-eval
-   (format
-    (concat "| cls result |"
-            " cls := Smalltalk at: #%s."
-            " result := Dictionary new."
-            " result at: #instance put:"
-            " ((cls protocols collect: [ :p |"
-            "     { (#category -> p name asString)."
-            "       (#methods -> (p methodSelectors collect: [ :s | s asString ]) asArray) }"
-            "       asDictionary ]) asArray)."
-            " result at: #class put:"
-            " ((cls class protocols collect: [ :p |"
-            "     { (#category -> p name asString)."
-            "       (#methods -> (p methodSelectors collect: [ :s | s asString ]) asArray) }"
-            "       asDictionary ]) asArray)."
-            " result")
-    class-name)))
+  "Return class and instance protocols for CLASS-NAME, cached per class."
+  (pharo-smalltalk--cache-get
+   pharo-smalltalk--protocols-cache
+   class-name
+   (lambda ()
+     (pharo-smalltalk-eval
+      (format
+       (concat "| cls result |"
+               " cls := Smalltalk at: #%s."
+               " result := Dictionary new."
+               " result at: #instance put:"
+               " ((cls protocols collect: [ :p |"
+               "     { (#category -> p name asString)."
+               "       (#methods -> (p methodSelectors collect: [ :s | s asString ]) asArray) }"
+               "       asDictionary ]) asArray)."
+               " result at: #class put:"
+               " ((cls class protocols collect: [ :p |"
+               "     { (#category -> p name asString)."
+               "       (#methods -> (p methodSelectors collect: [ :s | s asString ]) asArray) }"
+               "       asDictionary ]) asArray)."
+               " result")
+       class-name)))))
 
 (defun pharo-smalltalk-selector-from-source (source)
   "Extract a selector from Smalltalk SOURCE."
@@ -1111,6 +1161,48 @@ here and invalidate themselves.")
 
 (add-hook 'pharo-smalltalk-after-mutation-hook
           #'pharo-smalltalk--invalidate-class-cache)
+
+(defcustom pharo-smalltalk-browser-cache-ttl 30
+  "Seconds to cache browser metadata (packages/classes/protocols)."
+  :type 'integer
+  :group 'pharo-smalltalk)
+
+(defvar pharo-smalltalk--packages-cache nil
+  "Cons cell (PACKAGES . TIMESTAMP) for cached package list, or nil.")
+
+(defvar pharo-smalltalk--classes-cache (make-hash-table :test 'equal)
+  "Hash: package-name -> (CLASSES . TIMESTAMP).")
+
+(defvar pharo-smalltalk--extended-classes-cache (make-hash-table :test 'equal)
+  "Hash: package-name -> (EXTENDED-CLASSES . TIMESTAMP).")
+
+(defvar pharo-smalltalk--protocols-cache (make-hash-table :test 'equal)
+  "Hash: class-name -> (PROTOCOLS . TIMESTAMP).")
+
+(defun pharo-smalltalk--cache-fresh-p (timestamp)
+  "Non-nil when TIMESTAMP is within `pharo-smalltalk-browser-cache-ttl'."
+  (and (numberp timestamp)
+       (< (- (float-time) timestamp)
+          pharo-smalltalk-browser-cache-ttl)))
+
+(defun pharo-smalltalk--cache-get (table key compute)
+  "Return cached value for KEY in TABLE; otherwise call COMPUTE and store it."
+  (let ((entry (gethash key table)))
+    (if (and entry (pharo-smalltalk--cache-fresh-p (cdr entry)))
+        (car entry)
+      (let ((fresh (funcall compute)))
+        (puthash key (cons fresh (float-time)) table)
+        fresh))))
+
+(defun pharo-smalltalk--invalidate-browser-caches ()
+  "Drop browser caches; called on Pharo-side mutations and manual refresh."
+  (setq pharo-smalltalk--packages-cache nil)
+  (clrhash pharo-smalltalk--classes-cache)
+  (clrhash pharo-smalltalk--extended-classes-cache)
+  (clrhash pharo-smalltalk--protocols-cache))
+
+(add-hook 'pharo-smalltalk-after-mutation-hook
+          #'pharo-smalltalk--invalidate-browser-caches)
 
 ;; ---------- AST parsing via Pharo's RBParser ----------
 
@@ -1557,36 +1649,6 @@ global command prefix when configured."
     (pharo-smalltalk--register-auto-modes)
     (pharo-smalltalk--install-global-key)
     (setq pharo-smalltalk--installed-p t)))
-
-(defalias 'pharo-eval-region #'pharo-smalltalk-eval-region)
-(defalias 'pharo-eval-buffer #'pharo-smalltalk-eval-buffer)
-(defalias 'pharo-eval-paragraph-or-region #'pharo-smalltalk-eval-paragraph-or-region)
-(defalias 'pharo-eval-string-debug #'pharo-smalltalk-eval-string-debug)
-(defalias 'pharo-show-last-http-response #'pharo-smalltalk-show-last-http-response)
-(defalias 'pharo-show-last-result #'pharo-smalltalk-show-last-result)
-(defalias 'pharo-get-class-source #'pharo-smalltalk-get-class-source)
-(defalias 'pharo-get-method-source #'pharo-smalltalk-get-method-source)
-(defalias 'pharo-search-implementors #'pharo-smalltalk-search-implementors)
-(defalias 'pharo-insert-class-source #'pharo-smalltalk-insert-class-source)
-(defalias 'pharo-insert-method-source #'pharo-smalltalk-insert-method-source)
-(defalias 'my/smalltalk-eval #'pharo-smalltalk-eval)
-(defalias 'my/smalltalk-list-packages #'pharo-smalltalk-list-packages)
-(defalias 'my/smalltalk-list-classes #'pharo-smalltalk-list-classes)
-(defalias 'my/smalltalk-import-tonel-package #'pharo-smalltalk-import-tonel-package)
-(defalias 'my/smalltalk-get-class-source #'pharo-smalltalk-get-class-source)
-(defalias 'my/smalltalk-get-method-source #'pharo-smalltalk-get-method-source)
-(defalias 'my/smalltalk-selector-from-source #'pharo-smalltalk-selector-from-source)
-(defalias 'my/smalltalk-parse-class-definition #'pharo-smalltalk-parse-class-definition)
-(defalias 'my/smalltalk-compile-method #'pharo-smalltalk-compile-method)
-(defalias 'my/smalltalk-compile-class-definition #'pharo-smalltalk-compile-class-definition)
-(defalias 'my/smalltalk-eval-region-or-line #'pharo-smalltalk-eval-region-or-line)
-(defalias 'my/smalltalk-browse-class #'pharo-smalltalk-browse-class)
-(defalias 'my/smalltalk-show-method-source #'pharo-smalltalk-show-method-source)
-(defalias 'my/smalltalk-workspace #'pharo-smalltalk-workspace)
-(defalias 'my/smalltalk-ping #'pharo-smalltalk-ping)
-(defalias 'my/smalltalk-inspect-class-at-point #'pharo-smalltalk-inspect-class-at-point)
-(defalias 'my/smalltalk-send-defun #'pharo-smalltalk-send-defun)
-(defalias 'my/smalltalk-send-chunk #'pharo-smalltalk-send-chunk)
 
 (provide 'pharo-smalltalk)
 ;;; pharo-smalltalk.el ends here
