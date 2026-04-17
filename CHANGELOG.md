@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Ship Pharo-side patches under `pharo/`: transcript capture in
+  `SisServer>>handleEval:` plus NeoJSON fallbacks for `Object` and
+  `Association`. Includes a `pharo/install.st` runtime installer.
+- Rewrite `README.md` as a full installation + usage manual.
+- Fix workspace `u` input (buffer-local keymap in browser source view).
+- Normalize Pharo CR line endings to LF when capturing Transcript output.
+
 ## 0.1.0 - 2026-04-16
 
 - Package the live Pharo Smalltalk bridge behind `pharo-smalltalk-install`.
