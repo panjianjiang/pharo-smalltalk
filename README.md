@@ -54,8 +54,8 @@ SisServer current restart.
 
 The extras add Transcript capture in `handleEval:` and targeted
 NeoJSON helpers for `StThreadSafeTranscript` / `Association`. See
-[`pharo/README.md`](pharo/README.md) for what each piece does,
-override semantics, and the legacy `install.st` fallback.
+[`pharo/README.md`](pharo/README.md) for override semantics, local
+bootstrap, and Pharo-side regression tests.
 
 [PharoSmalltalkInteropServer]: https://github.com/mumez/PharoSmalltalkInteropServer
 
@@ -81,6 +81,13 @@ Verify the bridge:
 
 ```text
 M-x pharo-smalltalk-ping     ; round-trips a tiny eval to the server
+```
+
+Minimal smoke check:
+
+```smalltalk
+Transcript show: 'Hello'; cr.
+3 + 4
 ```
 
 ## Usage
@@ -159,6 +166,7 @@ provides completion-at-point and eldoc-style method hints backed by
 - `C-c s t p` — run tests in a package
 - `C-c s t s` — run the built-in smoke suite against the live server
 - `C-c s t r` — re-run the last test selection
+- Pharo-side regression tests live in `pharo/Sis-Bridge-Extras-Tests`
 
 Batch ERT suite (hermetic, no running server required):
 
@@ -219,6 +227,9 @@ All are under the `pharo-smalltalk` customize group.
 - **Transcript output missing from Emacs result** — same fix: the
   patched `handleEval:` is what surfaces Transcript text in the
   response.
+- **`/eval` errors lose Transcript output** — fixed in current
+  `Sis-Bridge-Extras`; upgrade if failure responses are still missing
+  the `transcript` field.
 - **`u` key doesn't insert letter in workspace** — fixed in v0.1.0+;
   make sure you're on the current `pharo-smalltalk.el` /
   `pharo-smalltalk-browser.el`. The old code used `local-set-key`,

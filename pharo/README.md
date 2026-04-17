@@ -1,7 +1,6 @@
 # Pharo-side bridge
 
-This directory holds a Tonel-format Pharo project. It packages two
-small additions on top of upstream
+This directory holds the Pharo-side package that sits on top of upstream
 [PharoSmalltalkInteropServer]:
 
 1. **Transcript capture in `SisServer>>handleEval:`** — `/eval` returns
@@ -18,10 +17,10 @@ small additions on top of upstream
 
 | Path | Purpose |
 | --- | --- |
-| `BaselineOfPharoSmalltalkBridge/` | Metacello baseline; depends on upstream + loads `Sis-Bridge-Extras`. |
-| `Sis-Bridge-Extras/` | Tonel package containing the two NeoJSON extensions plus the `SisServer` override. |
-| `Sis-Bridge-Extras-Tests/` | Optional integration tests for Transcript capture and serialization. |
-| `install.st` | Local bootstrap script that loads the Tonel sources via Metacello. |
+| `BaselineOfPharoSmalltalkBridge/` | Metacello baseline for upstream server + `Sis-Bridge-Extras`. |
+| `Sis-Bridge-Extras/` | `SisServer` override plus the targeted NeoJSON extensions. |
+| `Sis-Bridge-Extras-Tests/` | Regression tests for `/eval`, Transcript capture, and serialization. |
+| `install.st` | Local bootstrap script for loading `Sis-Bridge-Extras` from disk. |
 
 ## Recommended install — Metacello
 
@@ -35,10 +34,9 @@ Metacello new
 SisServer current restart.
 ```
 
-This loads upstream `PharoSmalltalkInteropServer` first, then the
-`Sis-Bridge-Extras` package on top. Re-running the same expression
-upgrades both. Restart the server to make sure the new `handleEval:`
-serves `/eval`.
+This loads upstream `PharoSmalltalkInteropServer` first and then
+`Sis-Bridge-Extras`. Re-running the same expression upgrades both.
+Restart the server so `/eval` starts serving the patched `handleEval:`.
 
 > **Override semantics**: `SisServer>>handleEval:` is shipped as an
 > extension method owned by `Sis-Bridge-Extras`. After load, this
@@ -58,9 +56,9 @@ Metacello new
 
 ## Fallback install — install.st
 
-If you already have this repository checked out locally and want to
-load from disk instead of GitHub, point the bootstrap script at the
-local `pharo/` directory and evaluate it in a Playground:
+If this repository is already checked out locally and you want to load
+from disk instead of GitHub, point the bootstrap script at the local
+`pharo/` directory and evaluate it:
 
 ```smalltalk
 Smalltalk globals
@@ -71,24 +69,20 @@ Smalltalk compiler evaluate:
 SisServer restart.
 ```
 
-`install.st` delegates to the same local Tonel sources via Metacello
-and only loads `Sis-Bridge-Extras`, assuming upstream
-`PharoSmalltalkInteropServer` is already present in the image.
+`install.st` delegates to the same local Tonel sources via Metacello and
+only loads `Sis-Bridge-Extras`. It assumes upstream
+`PharoSmalltalkInteropServer` is already in the image.
 
 ## Verification
 
-After install, from Emacs run:
+Quick checks after install:
 
 ```text
 M-x pharo-smalltalk-test-run-smoke
 ```
 
-or evaluate a line that writes to the Transcript and check that the
-output appears inline:
-
 ```smalltalk
 Transcript crShow: 'hello from Pharo'. 1 + 2
 ```
 
-For Pharo-side regression coverage, run `SisBridgeExtrasTest`, including
-the failure-path `/eval` case that should still retain Transcript output.
+For Pharo-side regression coverage, run `SisBridgeExtrasTest`.
