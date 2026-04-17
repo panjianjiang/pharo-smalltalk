@@ -154,6 +154,24 @@ Set to nil to leave the command map unbound globally."
   "Semantic source kind of current buffer.
 Known values include `workspace', `method', `class-definition', `class-source'.")
 
+(cl-defstruct (pharo-smalltalk-method-spec
+               (:constructor pharo-smalltalk-method-spec-create))
+  class-name
+  selector
+  class-side-p
+  category)
+
+(defun pharo-smalltalk-method-spec-side-symbol (spec)
+  "Return SPEC's side as `class' or `instance'."
+  (if (pharo-smalltalk-method-spec-class-side-p spec) 'class 'instance))
+
+(defun pharo-smalltalk-method-spec-display-name (spec)
+  "Return a human-readable CLASS>>SELECTOR name for SPEC."
+  (format "%s%s>>%s"
+          (pharo-smalltalk-method-spec-class-name spec)
+          (if (pharo-smalltalk-method-spec-class-side-p spec) " class" "")
+          (pharo-smalltalk-method-spec-selector spec)))
+
 (defvar pharo-smalltalk-font-lock-keywords
   '(("\\_<\\(self\\|super\\|true\\|false\\|nil\\|thisContext\\)\\_>" . font-lock-constant-face)
     ("\\_<\\([A-Z][A-Za-z0-9_]*\\)\\_>" . font-lock-type-face)

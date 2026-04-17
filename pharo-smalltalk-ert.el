@@ -73,14 +73,20 @@
     (should (equal pharo-smalltalk-last-result 7))))
 
 (ert-deftest pharo-smalltalk-xref-normalizes-class-side-hits ()
-  (should
-   (equal
-    (pharo-smalltalk-xref--normalize-method-hit "CodexTmpIntegration class" "answer")
-    '("CodexTmpIntegration" "answer" t)))
-  (should
-   (equal
-    (pharo-smalltalk-xref--normalize-method-hit "CodexTmpIntegration" "value")
-    '("CodexTmpIntegration" "value" nil))))
+  (let ((class-side (pharo-smalltalk-xref--normalize-method-hit
+                     "CodexTmpIntegration class" "answer"))
+        (instance-side (pharo-smalltalk-xref--normalize-method-hit
+                        "CodexTmpIntegration" "value")))
+    (should (equal (pharo-smalltalk-method-spec-class-name class-side)
+                   "CodexTmpIntegration"))
+    (should (equal (pharo-smalltalk-method-spec-selector class-side)
+                   "answer"))
+    (should (pharo-smalltalk-method-spec-class-side-p class-side))
+    (should (equal (pharo-smalltalk-method-spec-class-name instance-side)
+                   "CodexTmpIntegration"))
+    (should (equal (pharo-smalltalk-method-spec-selector instance-side)
+                   "value"))
+    (should-not (pharo-smalltalk-method-spec-class-side-p instance-side))))
 
 (ert-deftest pharo-smalltalk-xref-apropos-expands-selectors-via-implementors ()
   (cl-letf (((symbol-function 'pharo-smalltalk-search-classes-like)
@@ -242,6 +248,28 @@
                              "accessing"))
               (should (equal pharo-smalltalk-browser--current
                              '(source "DemoClass" "value" instance "accessing")))))
+        (when (get-buffer pharo-smalltalk-browser-buffer-name)
+          (kill-buffer pharo-smalltalk-browser-buffer-name))))))
+
+(ert-deftest pharo-smalltalk-browser-method-rows-use-method-spec-ids ()
+  (let ((pharo-smalltalk-browser-buffer-name "*Pharo Browser Test*"))
+    (cl-letf (((symbol-function 'pharo-smalltalk--class-protocols)
+               (lambda (_class)
+                 '((instance . (((category . "accessing")
+                                 (methods . ("value")))))
+                   (class . nil)))))
+      (unwind-protect
+          (progn
+            (pharo-smalltalk-browser--render-methods "DemoClass" 'instance)
+            (with-current-buffer pharo-smalltalk-browser-buffer-name
+              (let ((spec (tabulated-list-get-id)))
+                (should (pharo-smalltalk-method-spec-p spec))
+                (should (equal (pharo-smalltalk-method-spec-class-name spec)
+                               "DemoClass"))
+                (should (equal (pharo-smalltalk-method-spec-selector spec)
+                               "value"))
+                (should (equal (pharo-smalltalk-method-spec-category spec)
+                               "accessing")))))
         (when (get-buffer pharo-smalltalk-browser-buffer-name)
           (kill-buffer pharo-smalltalk-browser-buffer-name))))))
 

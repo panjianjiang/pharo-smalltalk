@@ -126,7 +126,12 @@
                    for cat = (alist-get 'category proto)
                    nconc
                    (mapcar (lambda (sel)
-                             (list (cons sel cat) (vector sel (or cat ""))))
+                             (let ((spec (pharo-smalltalk-method-spec-create
+                                          :class-name class
+                                          :selector sel
+                                          :class-side-p (eq side 'class)
+                                          :category cat)))
+                               (list spec (vector sel (or cat "")))))
                            (alist-get 'methods proto)))))
     (with-current-buffer buf
       (pharo-smalltalk-browser-mode)
@@ -180,11 +185,12 @@
       (`(classes ,_pkg)
        (pharo-smalltalk-browser--render-methods (aref entry 0) 'instance))
       (`(methods ,class ,side)
-       (pharo-smalltalk-browser--render-source
-        class
-        (car (tabulated-list-get-id))
-        side
-        (cdr (tabulated-list-get-id))))
+       (let ((spec (tabulated-list-get-id)))
+         (pharo-smalltalk-browser--render-source
+          (pharo-smalltalk-method-spec-class-name spec)
+          (pharo-smalltalk-method-spec-selector spec)
+          (pharo-smalltalk-method-spec-side-symbol spec)
+          (pharo-smalltalk-method-spec-category spec))))
       (_ (user-error "Nothing to activate in this view")))))
 
 (defun pharo-smalltalk-browser-toggle-side ()

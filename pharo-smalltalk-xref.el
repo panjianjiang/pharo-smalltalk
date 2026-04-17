@@ -108,11 +108,20 @@
               :group (pharo-smalltalk-xref--group-label class-name))))
 
 (defun pharo-smalltalk-xref--method-ref (class-name selector &optional class-side-p)
-  (xref-make
-   (format "%s%s>>%s" class-name (if class-side-p " class" "") selector)
-   (pharo-smalltalk-xref-method-location-make
-    :class-name class-name :selector selector
+  (pharo-smalltalk-xref--method-ref-from-spec
+   (pharo-smalltalk-method-spec-create
+    :class-name class-name
+    :selector selector
     :class-side-p (and class-side-p t))))
+
+(defun pharo-smalltalk-xref--method-ref-from-spec (spec)
+  "Build an xref item from method SPEC."
+  (xref-make
+   (pharo-smalltalk-method-spec-display-name spec)
+   (pharo-smalltalk-xref-method-location-make
+    :class-name (pharo-smalltalk-method-spec-class-name spec)
+    :selector (pharo-smalltalk-method-spec-selector spec)
+    :class-side-p (and (pharo-smalltalk-method-spec-class-side-p spec) t))))
 
 (defun pharo-smalltalk-xref--group-label (class-name)
   "Return a user-facing group label for CLASS-NAME in the current context."
@@ -128,17 +137,16 @@
       "Other classes"))))
 
 (defun pharo-smalltalk-xref--normalize-method-hit (class-name selector)
-  "Normalize CLASS-NAME and SELECTOR from a server result.
-Returns (CLASS-NAME SELECTOR CLASS-SIDE-P), stripping a trailing
-\" class\" suffix from CLASS-NAME when present."
+  "Normalize CLASS-NAME and SELECTOR from a server result into a method spec."
   (let ((class-side-p (and class-name
                            (string-match-p " class\\'" class-name)
                            t)))
-    (list (if class-side-p
-              (string-remove-suffix " class" class-name)
-            class-name)
-          selector
-          class-side-p)))
+    (pharo-smalltalk-method-spec-create
+     :class-name (if class-side-p
+                     (string-remove-suffix " class" class-name)
+                   class-name)
+     :selector selector
+     :class-side-p class-side-p)))
 
 (defvar pharo-smalltalk-xref--lineage-cache (make-hash-table :test 'equal)
   "Cache of class lineage lists keyed by class name.")
@@ -245,15 +253,16 @@ current superclass chain, then other methods, then shorter summaries."
                         :params `((method_name . ,identifier))))
                  (impls (alist-get 'result resp)))
             (dolist (impl impls)
-              (pcase-let ((`(,cls ,m ,side)
-                           (pharo-smalltalk-xref--normalize-method-hit
-                            (alist-get 'class impl)
-                            (alist-get 'method impl))))
-                (when (and cls m)
-                  (let ((item (pharo-smalltalk-xref--method-ref cls m side)))
+              (let ((spec (pharo-smalltalk-xref--normalize-method-hit
+                           (alist-get 'class impl)
+                           (alist-get 'method impl))))
+                (when (and (pharo-smalltalk-method-spec-class-name spec)
+                           (pharo-smalltalk-method-spec-selector spec))
+                  (let ((item (pharo-smalltalk-xref--method-ref-from-spec spec)))
                     (setf (pharo-smalltalk-xref-method-location-group
                            (xref-item-location item))
-                          (pharo-smalltalk-xref--group-label cls))
+                          (pharo-smalltalk-xref--group-label
+                           (pharo-smalltalk-method-spec-class-name spec)))
                     (push item locs))))))
         (error (message "pharo xref: search-implementors failed (%s)"
                         (error-message-string err)))))
@@ -272,15 +281,16 @@ current superclass chain, then other methods, then shorter summaries."
                         :params `((class_name . ,identifier))))
                  (refs (alist-get 'result resp)))
             (dolist (ref refs)
-              (pcase-let ((`(,cls ,m ,side)
-                           (pharo-smalltalk-xref--normalize-method-hit
-                            (alist-get 'class ref)
-                            (alist-get 'method ref))))
-                (when (and cls m)
-                  (let ((item (pharo-smalltalk-xref--method-ref cls m side)))
+              (let ((spec (pharo-smalltalk-xref--normalize-method-hit
+                           (alist-get 'class ref)
+                           (alist-get 'method ref))))
+                (when (and (pharo-smalltalk-method-spec-class-name spec)
+                           (pharo-smalltalk-method-spec-selector spec))
+                  (let ((item (pharo-smalltalk-xref--method-ref-from-spec spec)))
                     (setf (pharo-smalltalk-xref-method-location-group
                            (xref-item-location item))
-                          (pharo-smalltalk-xref--group-label cls))
+                          (pharo-smalltalk-xref--group-label
+                           (pharo-smalltalk-method-spec-class-name spec)))
                     (push item locs))))))
         (error (message "pharo xref: search-references-to-class failed (%s)"
                         (error-message-string err)))))
@@ -291,15 +301,16 @@ current superclass chain, then other methods, then shorter summaries."
                         :params `((program_symbol . ,identifier))))
                  (refs (alist-get 'result resp)))
             (dolist (ref refs)
-              (pcase-let ((`(,cls ,m ,side)
-                           (pharo-smalltalk-xref--normalize-method-hit
-                            (alist-get 'class ref)
-                            (alist-get 'method ref))))
-                (when (and cls m)
-                  (let ((item (pharo-smalltalk-xref--method-ref cls m side)))
+              (let ((spec (pharo-smalltalk-xref--normalize-method-hit
+                           (alist-get 'class ref)
+                           (alist-get 'method ref))))
+                (when (and (pharo-smalltalk-method-spec-class-name spec)
+                           (pharo-smalltalk-method-spec-selector spec))
+                  (let ((item (pharo-smalltalk-xref--method-ref-from-spec spec)))
                     (setf (pharo-smalltalk-xref-method-location-group
                            (xref-item-location item))
-                          (pharo-smalltalk-xref--group-label cls))
+                          (pharo-smalltalk-xref--group-label
+                           (pharo-smalltalk-method-spec-class-name spec)))
                     (push item locs))))))
         (error (message "pharo xref: search-references failed (%s)"
                         (error-message-string err)))))
@@ -326,15 +337,16 @@ current superclass chain, then other methods, then shorter summaries."
                                    :params `((method_name . ,hit))))
                        (impls (alist-get 'result impl-resp)))
                   (dolist (impl impls)
-                    (pcase-let ((`(,cls ,m ,side)
-                                 (pharo-smalltalk-xref--normalize-method-hit
-                                  (alist-get 'class impl)
-                                  (alist-get 'method impl))))
-                      (when (and cls m)
-                        (let ((item (pharo-smalltalk-xref--method-ref cls m side)))
+                    (let ((spec (pharo-smalltalk-xref--normalize-method-hit
+                                 (alist-get 'class impl)
+                                 (alist-get 'method impl))))
+                      (when (and (pharo-smalltalk-method-spec-class-name spec)
+                                 (pharo-smalltalk-method-spec-selector spec))
+                        (let ((item (pharo-smalltalk-xref--method-ref-from-spec spec)))
                           (setf (pharo-smalltalk-xref-method-location-group
                                  (xref-item-location item))
-                                (pharo-smalltalk-xref--group-label cls))
+                                (pharo-smalltalk-xref--group-label
+                                 (pharo-smalltalk-method-spec-class-name spec)))
                           (push item locs))))))
               (error nil))))
       (error nil))
