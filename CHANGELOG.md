@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Terminal-side screenshot helper**: ship
+  `scripts/pharo-show-image`, a ~20-line POSIX sh script that opens
+  a fresh foot window (via `footclient` + the foot-server socket,
+  falling back to standalone `foot`) and sixel-renders the PNG with
+  `chafa`.  `pharo-smalltalk-screenshot-viewer` now auto-detects the
+  helper on TTY frames so users who copy it onto `$PATH` get inline
+  sixel previews without extra configuration.
 - **Screenshot command**: new `pharo-smalltalk-show-screen' (bound to
   `C-c s v') wraps the server `/read-screen' endpoint.  Captures a
   PNG of the Pharo World (or `spec' / `roassal' with a prefix arg)

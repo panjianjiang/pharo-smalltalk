@@ -1064,13 +1064,16 @@ When CLASS-SIDE-P is non-nil, fetch the class-side method."
 (defcustom pharo-smalltalk-screenshot-viewer 'auto
   "How `pharo-smalltalk-show-screen' displays the captured PNG.
 Options:
- - `auto' (default) — `image-mode' buffer on GUI frames, otherwise
-   fall back to `xdg-open' / `open' when available.
+ - `auto' (default) — `image-mode' buffer on GUI frames; on TTY
+   frames prefer the `pharo-show-image' helper if installed
+   (sixel-renders the PNG in a fresh terminal window), otherwise
+   fall back to `xdg-open' / `open'.
  - `buffer' — always open in an `image-mode' buffer (fine on GUI,
    shows an unrenderable placeholder on TUI).
  - a string — treated as a shell command; the PNG path is appended
    as the final argument.  For terminal image protocols, e.g.
-   \"kitty +kitten icat\", \"wezterm imgcat\", \"imgcat\" (iTerm2)."
+   \"kitty +kitten icat\", \"wezterm imgcat\", \"imgcat\" (iTerm2),
+   or \"chafa -f sixel -s 100x40\"."
   :type '(choice (const :tag "Auto" auto)
                  (const :tag "Always Emacs image-mode buffer" buffer)
                  (string :tag "External command"))
@@ -1078,7 +1081,9 @@ Options:
 
 (defun pharo-smalltalk--pick-screenshot-strategy ()
   "Resolve `pharo-smalltalk-screenshot-viewer' to a concrete strategy.
-Returns either `buffer' or a list (COMMAND &rest ARGS)."
+Returns either `buffer' or a list (COMMAND &rest ARGS).  Re-evaluated
+per call so the `auto' strategy adapts to the currently-selected
+frame's graphic capability."
   (pcase pharo-smalltalk-screenshot-viewer
     ('buffer 'buffer)
     ((pred stringp)
@@ -1086,6 +1091,7 @@ Returns either `buffer' or a list (COMMAND &rest ARGS)."
     ('auto
      (cond
       ((display-graphic-p) 'buffer)
+      ((executable-find "pharo-show-image") (list "pharo-show-image"))
       ((executable-find "xdg-open") (list "xdg-open"))
       ((executable-find "open") (list "open"))
       (t 'buffer)))

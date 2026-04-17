@@ -1,0 +1,30 @@
+#!/bin/sh
+# Pop open a new foot window and sixel-render the image inside it.
+# Intended as a `pharo-smalltalk-screenshot-viewer'.
+#
+# Usage: pharo-show-image /path/to/image.png
+#
+# The new window stays open until the user presses a key, so single-frame
+# captures don't vanish instantly.
+
+set -eu
+
+img=${1:?usage: pharo-show-image <image>}
+
+# Figure out terminal geometry defaults; chafa will fit the image to this.
+cols=${PHARO_SHOW_IMAGE_COLS:-100}
+rows=${PHARO_SHOW_IMAGE_ROWS:-40}
+
+# Prefer footclient (uses the running foot-server, instant spawn); fall
+# back to a standalone foot process when the server is unreachable.
+if command -v footclient >/dev/null 2>&1 && \
+   [ -S "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/foot.sock" ]; then
+	term="footclient"
+else
+	term="foot"
+fi
+
+exec "$term" --title="pharo-screenshot" -- \
+	sh -c "chafa --format=sixel --size=${cols}x${rows} --animate=off \"\$1\"; \
+	       printf '\n[press any key to close] '; read -n 1 _; echo" \
+	_ "$img"

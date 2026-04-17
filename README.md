@@ -214,7 +214,26 @@ block.
 | `pharo-smalltalk-indent-offset` | `2` | indent step |
 | `pharo-smalltalk-class-cache-ttl` | `30` | class-name cache TTL (seconds) |
 | `pharo-smalltalk-capf-cache-ttl` | `15` | completion/query cache TTL (seconds) |
-| `pharo-smalltalk-screenshot-viewer` | `auto` | how `pharo-smalltalk-show-screen' renders the PNG: `auto' (GUI → `image-mode' buffer, TUI → `xdg-open'/`open'), `buffer', or a shell command string |
+| `pharo-smalltalk-screenshot-viewer` | `auto` | how `pharo-smalltalk-show-screen' renders the PNG: `auto' (GUI → `image-mode' buffer, TUI → `pharo-show-image' helper if on `exec-path', else `xdg-open'/`open'), `buffer', or a shell command string |
+
+### Viewing screenshots inside a TTY
+
+`auto` resolves to `pharo-show-image` whenever the helper under
+[`scripts/pharo-show-image`](scripts/pharo-show-image) is on your
+`$PATH`.  The helper pops open a fresh foot (via `footclient` when the
+foot-server socket is running, standalone `foot` otherwise) and
+sixel-renders the PNG with `chafa`.  Install it with:
+
+```sh
+install -m0755 scripts/pharo-show-image ~/.local/bin/
+```
+
+Requirements: `foot >= 1.7` (built-in sixel) and `chafa`.  Override
+`PHARO_SHOW_IMAGE_COLS` / `PHARO_SHOW_IMAGE_ROWS` to change render
+size (defaults `100x40`).  For other terminals substitute
+`kitty +kitten icat`, `wezterm imgcat`, `imgcat` (iTerm2), or any
+other sixel-capable command via the `pharo-smalltalk-screenshot-viewer`
+custom variable.
 
 All are under the `pharo-smalltalk` customize group.
 
