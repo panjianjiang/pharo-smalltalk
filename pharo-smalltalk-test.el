@@ -1,4 +1,13 @@
-;;; pharo-smalltalk-test.el --- test runner for Pharo Smalltalk -*- lexical-binding: t; -*-
+;;; pharo-smalltalk-test.el --- Test runner for Pharo Smalltalk -*- lexical-binding: t; -*-
+
+;;; Commentary:
+
+;; Runs Pharo TestCase classes and packages through the bridge and
+;; renders the parsed summary in a `*Pharo Tests*' buffer.  Also
+;; offers `pharo-smalltalk-test-run-smoke' for a fixed live integration
+;; check against the running interop server.
+
+;;; Code:
 
 (require 'cl-lib)
 (require 'subr-x)

@@ -1,7 +1,11 @@
 ;;; pharo-smalltalk-xref.el --- xref backend for Pharo Smalltalk -*- lexical-binding: t; -*-
 
-;; Plugs Pharo into Emacs' xref infrastructure so M-. / M-? / xref-find-apropos
-;; work in pharo-smalltalk-mode buffers.
+;;; Commentary:
+
+;; Plugs Pharo into Emacs' xref infrastructure so M-. / M-? and
+;; `xref-find-apropos' work in `pharo-smalltalk-mode' buffers.
+
+;;; Code:
 
 (require 'xref)
 (require 'cl-lib)

@@ -26,42 +26,37 @@ by the Pharo image.
 
 ## Requirements
 
-- Pharo 13 (or compatible) image with [PharoSmalltalkInteropServer] loaded.
+- Pharo 13 (or compatible) image.
 - Emacs 29.1+.
-- Patched SisServer: see [`pharo/`](pharo/) — transcript capture and
-  NeoJSON fallbacks. Without these patches the `/eval` endpoint can
-  return HTTP 500 for non-trivial results, and Transcript output is not
-  surfaced to Emacs.
+- This repo's `BaselineOfPharoSmalltalkBridge`, which loads upstream
+  [PharoSmalltalkInteropServer][pharosis] plus the `Sis-Bridge-Extras`
+  package (Transcript capture + NeoJSON fallbacks). Without the extras
+  the `/eval` endpoint can return HTTP 500 for non-trivial results, and
+  Transcript output is not surfaced to Emacs.
+
+[pharosis]: https://github.com/mumez/PharoSmalltalkInteropServer
 
 ## Install
 
 ### 1. Pharo side
 
-Load `PharoSmalltalkInteropServer` in a fresh image:
+In a Pharo 13 image, load this repo's baseline — it pulls upstream
+[PharoSmalltalkInteropServer] and the bridge extras in one shot:
 
 ```smalltalk
 Metacello new
-    baseline: 'PharoSmalltalkInteropServer';
-    repository: 'github://mumez/PharoSmalltalkInteropServer:main/src';
+    baseline: 'PharoSmalltalkBridge';
+    repository: 'github://panjianjiang/pharo-smalltalk:main/pharo';
     load.
+SisServer current restart.
 ```
 
-Start the HTTP server on port 8086:
+The extras add Transcript capture in `handleEval:` and NeoJSON
+fallbacks for `Object` / `Association` so arbitrary results serialize
+cleanly. See [`pharo/README.md`](pharo/README.md) for what each piece
+does, override semantics, and the legacy `install.st` fallback.
 
-```smalltalk
-SisServer current start.
-```
-
-Then apply the patches shipped in this repo (Transcript capture +
-NeoJSON fallbacks):
-
-```smalltalk
-FileStream fileIn: '/path/to/pharo-smalltalk/pharo/install.st'.
-SisServer restart.
-```
-
-See [`pharo/README.md`](pharo/README.md) for alternative install
-methods and what each patch does.
+[PharoSmalltalkInteropServer]: https://github.com/mumez/PharoSmalltalkInteropServer
 
 ### 2. Emacs side
 

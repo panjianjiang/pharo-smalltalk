@@ -1,10 +1,19 @@
 ;;; pharo-smalltalk-ert.el --- ERT tests for Pharo Smalltalk integration -*- lexical-binding: t; -*-
 
+;;; Commentary:
+
+;; Hermetic ERT suite for the `pharo-smalltalk' bridge.  Stubs out
+;; HTTP via `cl-letf' so the suite can run under `emacs --batch'
+;; without a live Pharo image.
+
+;;; Code:
+
 (require 'ert)
 (require 'xref)
 (require 'pharo-smalltalk)
 (require 'pharo-smalltalk-xref)
 (require 'pharo-smalltalk-capf)
+(require 'pharo-smalltalk-test)
 
 (ert-deftest pharo-smalltalk-package-metadata-is-available ()
   (should (string-match-p "\\`[0-9]+\\.[0-9]+\\.[0-9]+\\'"
@@ -182,7 +191,6 @@
                        "Superclass chain"))))))
 
 (ert-deftest pharo-smalltalk-test-parse-summary-handles-singular-plural ()
-  (require 'pharo-smalltalk-test)
   (should
    (equal (pharo-smalltalk-test--parse-summary
            "2 ran, 1 passed, 0 skipped, 0 expected failures, 1 failure, 0 errors")

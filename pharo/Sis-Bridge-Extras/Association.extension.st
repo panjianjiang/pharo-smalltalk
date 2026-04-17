@@ -1,6 +1,6 @@
 Extension { #name : 'Association' }
 
-{ #category : '*Sis-Core' }
+{ #category : '*Sis-Bridge-Extras' }
 Association >> neoJsonOn: neoJSONWriter [
 	"An Association serializes as a one-entry JSON object."
 	neoJSONWriter writeMap: (Dictionary new

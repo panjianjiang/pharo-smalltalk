@@ -1,8 +1,12 @@
-;;; pharo-smalltalk-capf.el --- completion & eldoc for Pharo Smalltalk -*- lexical-binding: t; -*-
+;;; pharo-smalltalk-capf.el --- Completion and eldoc for Pharo Smalltalk -*- lexical-binding: t; -*-
 
-;; Provides completion-at-point and eldoc functions that query the live
-;; Pharo image via the interop server. Uses small caches to keep typing
-;; responsive.
+;;; Commentary:
+
+;; Provides `completion-at-point' and eldoc functions that query the
+;; live Pharo image via `PharoSmalltalkInteropServer'.  Uses small TTL
+;; caches plus async eldoc fetching to keep typing responsive.
+
+;;; Code:
 
 (require 'cl-lib)
 (require 'subr-x)
@@ -121,7 +125,8 @@
   (pharo-smalltalk-capf--cache-prune table max-entries))
 
 (defun pharo-smalltalk-capf--fetch-method-source-async (class selector class-side-p k)
-  "Asynchronously fetch CLASS>>SELECTOR source, caching it; call K with source or nil."
+  "Asynchronously fetch CLASS>>SELECTOR source, caching it.
+K is called with the source string (or nil on failure)."
   (let ((key (list class selector class-side-p)))
     (pharo-smalltalk--request-async
      "/get-method-source"
@@ -147,7 +152,8 @@
                (is_class_method . ,(if class-side-p "true" "false"))))))
 
 (defun pharo-smalltalk-capf--fetch-class-comment-async (class-name k)
-  "Asynchronously fetch CLASS-NAME's comment, caching it; call K with comment or nil."
+  "Asynchronously fetch CLASS-NAME's comment, caching it.
+K is called with the comment string (or nil on failure)."
   (pharo-smalltalk--request-async
    "/get-class-comment"
    (pharo-smalltalk--unwrap-async

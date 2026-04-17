@@ -1,7 +1,11 @@
 ;;; pharo-smalltalk-browser.el --- System browser for Pharo Smalltalk -*- lexical-binding: t; -*-
 
-;; A Pharo-style System Browser built on tabulated-list-mode.
-;; Drill-down: packages → classes → methods → source.
+;;; Commentary:
+
+;; A Pharo-style System Browser built on `tabulated-list-mode'.
+;; Drill-down navigation: packages, classes, methods, source.
+
+;;; Code:
 
 (require 'cl-lib)
 (require 'tabulated-list)

@@ -1,33 +1,35 @@
 ;;; pharo-smalltalk.el --- Live Pharo Smalltalk bridge and tools  -*- lexical-binding: t; -*-
 
+;; Author: Jianjiang Pan <panjianjiang@hotmail.com>
+;; Maintainer: Jianjiang Pan <panjianjiang@hotmail.com>
+;; URL: https://github.com/panjianjiang/pharo-smalltalk
 ;; Version: 0.1.0
 ;; Package-Requires: ((emacs "29.1"))
 ;; Keywords: languages, tools, smalltalk
-;; URL: https://github.com/panjianjiang
+;; SPDX-License-Identifier: MIT
 
 ;;; Commentary:
 
-;; `pharo-smalltalk' provides a live bridge from Emacs to a running Pharo
-;; image through `PharoSmalltalkInteropServer' / `SisServer'.
+;; `pharo-smalltalk' is an Emacs bridge to a running Pharo image served
+;; by `PharoSmalltalkInteropServer' / `SisServer' (HTTP, default port
+;; 8086). It provides a Smalltalk major mode, evaluation commands, an
+;; xref backend, completion and eldoc, a tabulated-list system browser,
+;; a test runner, and Org Babel integration.
 ;;
 ;; Entry point:
 ;;
-;;   (require 'pharo-smalltalk)
-;;   (pharo-smalltalk-install)
+;;     (require 'pharo-smalltalk)
+;;     (pharo-smalltalk-install)
 ;;
-;; The package includes:
+;; This loads the optional submodules listed in
+;; `pharo-smalltalk-package-modules' (xref, capf, test, browser by
+;; default), registers `pharo-smalltalk-mode' for `.st' / `.smalltalk'
+;; / `.tonel' files, and binds `pharo-smalltalk-command-map' to
+;; `pharo-smalltalk-global-command-key' (`C-c s' by default).
 ;;
-;; - `pharo-smalltalk-mode' for editing and evaluation
-;; - xref integration
-;; - completion and eldoc support
-;; - a browser UI
-;; - a test runner and live smoke checks
-;; - Org Babel execution support
-;;
-;; `lang-smalltalk.el' is a thin local wrapper for user-specific defaults.
-;;
-;; See `README-pharo-smalltalk.md' for a concise usage summary.
-;;
+;; The Pharo side requires the bridge extras shipped under `pharo/' in
+;; this repo — load them via Metacello.  See README.md for details.
+
 ;;; Code:
 
 (require 'cl-lib)
@@ -36,6 +38,15 @@
 (require 'subr-x)
 (require 'url)
 (require 'url-http)
+
+;; `url-http' sets these dynamically inside the `url-retrieve' callback;
+;; declare them so the byte-compiler stops complaining about free refs.
+(defvar url-http-response-status)
+(defvar url-http-end-of-headers)
+;; Org Babel hooks below are wrapped in `with-eval-after-load'; declare
+;; the variables they touch so we don't pull `org' in unconditionally.
+(defvar org-babel-tangle-lang-exts)
+(defvar org-src-lang-modes)
 
 (defgroup pharo-smalltalk nil
   "Bridge and lightweight workbench for PharoSmalltalkInteropServer."
@@ -419,7 +430,9 @@ sharing the same key."
 (defun pharo-smalltalk--display-value (label value &optional buffer-name mode)
   "Display LABEL and VALUE in a dedicated buffer.
 BUFFER-NAME defaults to `pharo-smalltalk-result-buffer-name'.
-When `pharo-smalltalk-last-transcript' is non-nil, prepend it as a Transcript section."
+MODE defaults to `special-mode'.
+When `pharo-smalltalk-last-transcript' is non-nil, prepend it as a
+Transcript section."
   (with-current-buffer (get-buffer-create (or buffer-name pharo-smalltalk-result-buffer-name))
     (let ((inhibit-read-only t))
       (erase-buffer)
@@ -558,7 +571,8 @@ Line endings are normalized from Pharo's CR to LF for Emacs display."
     (setq pharo-smalltalk-last-transcript tr)))
 
 (defun pharo-smalltalk--unwrap-async (callback)
-  "Return a callback that unwraps the Pharo result envelope before calling CALLBACK."
+  "Return a callback that unwraps the Pharo result envelope.
+The wrapped CALLBACK is invoked as (RESULT ERROR)."
   (lambda (response error)
     (cond
      (error (funcall callback nil error))
@@ -1327,7 +1341,8 @@ Falls back to plain `read-string' when the server is unreachable."
 (defvar pharo-smalltalk--selector-history nil)
 
 (defun pharo-smalltalk--read-selector (&optional prompt class-name class-side-p)
-  "Read a selector with PROMPT, completing against CLASS-NAME's selectors when known.
+  "Read a selector with PROMPT.
+Completes against CLASS-NAME's selectors when known.
 When CLASS-NAME is nil, fall back to a simple `read-string'."
   (let ((prompt (or prompt "Selector: ")))
     (if (and class-name (not (string-empty-p class-name)))

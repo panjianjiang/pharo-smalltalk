@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- **Pharo packaging**: ship `BaselineOfPharoSmalltalkBridge` plus a
+  `Sis-Bridge-Extras` Tonel package. Single-line install via
+  `Metacello new baseline: 'PharoSmalltalkBridge'; …; load`. The
+  legacy `pharo/install.st` script is kept as a fallback. The old
+  `pharo/Sis-Core/` forked-class blob is removed.
+- **MELPA-style headers**: full Author/Maintainer/URL/SPDX on the
+  main file, `;;; Commentary:` and `;;; Code:` markers on every
+  submodule, expanded `Commentary` block describing entry point.
+- **Byte-compile clean** under `byte-compile-error-on-warn t`:
+  declared `url-http-response-status` / `url-http-end-of-headers`
+  and the lazy-loaded org variables; broke five docstrings under
+  the 80-character limit.
+- **CI**: `.github/workflows/ci.yml` runs byte-compile, ERT, and
+  checkdoc on Emacs 29.1 / 29.4 / snapshot, plus `package-lint`
+  on the main file.
+
+
 - Ship Pharo-side patches under `pharo/`: transcript capture in
   `SisServer>>handleEval:` plus NeoJSON fallbacks for `Object` and
   `Association`. Includes a `pharo/install.st` runtime installer.
