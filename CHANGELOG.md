@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- **Live object inspector**: new `pharo-smalltalk-inspect-expression`
+  (bound to `C-c s j`) opens an interactive buffer on the result of an
+  arbitrary Smalltalk expression.  Shows class, print string,
+  identity hash, size, named instance variables, and indexable
+  contents (handles `SequenceableCollection`, `HashedCollection`, and
+  variable-slot objects).  `RET`/`TAB` drills into the row at point
+  against a server-side ref registry, `u` pops back, `g` refreshes
+  the view, `q` quits.  Printed strings and rows are bounded
+  (256 chars / 200 entries) to keep the bridge responsive.
+- **Pharo side**: new `Sis-Inspector` Tonel package plus
+  `Sis-Inspector-Tests` (7 regression tests covering root rendering,
+  inst-var rows, indexable rows, ref round-trip, unknown-ref raise,
+  child-limit truncation, bounded print).  `BaselineOfPharoSmalltalk
+  Bridge` now pulls Sis-Inspector into the `default` group and
+  Sis-Inspector-Tests into `tests`.
+
+
 - **Terminal-side screenshot helper**: ship
   `scripts/pharo-show-image`, a ~20-line POSIX sh script that opens
   a fresh foot window (via `footclient` + the foot-server socket,

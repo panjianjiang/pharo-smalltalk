@@ -116,6 +116,8 @@ With the default `C-c s` prefix:
 | `C-c s D` | `pharo-smalltalk-show-class-comment` |
 | `C-c s x` / `i` | export / import Tonel package |
 | `C-c s v` | `pharo-smalltalk-show-screen` (World screenshot + structure) |
+| `C-c s j` | `pharo-smalltalk-inspect-expression` (live object inspector) |
+| `C-c s J` | inspect the class name at point |
 | `C-c s P` | `pharo-smalltalk-ping` |
 | `C-c s t c/p/s/r` | run test class / package / smoke / re-run |
 
@@ -153,6 +155,26 @@ that drills down: packages → classes → methods → source.
 
 In the method source view, `u` returns to the method list (buffer-local
 binding — does not pollute `pharo-smalltalk-mode-map`).
+
+### Inspector
+
+`C-c s j` (`pharo-smalltalk-inspect-expression`) prompts for a Smalltalk
+expression, evaluates it live, and opens `*Pharo Inspector*` on the
+result — class, print string, instance variables, and indexable
+contents (dictionaries/sets/arrays/variable-slot objects all render).
+In the inspector:
+
+| Key | Action |
+| --- | --- |
+| `RET` / `TAB` | drill into the row at point |
+| `u` / `^` | pop back to the previous view |
+| `g` | refresh from the image |
+| `q` | quit |
+
+Drill-down is ref-based: every rendered row carries an integer ref into
+a per-image registry (`SisInspector class >> refs`), so child views
+show the live object, not a re-evaluation.  Printed strings are capped
+at 256 characters; large collections at 200 rows.
 
 ### Navigation
 

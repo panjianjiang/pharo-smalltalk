@@ -83,12 +83,13 @@
   :type 'boolean
   :group 'pharo-smalltalk)
 
-(defcustom pharo-smalltalk-package-modules '(xref capf test browser)
+(defcustom pharo-smalltalk-package-modules '(xref capf test browser inspector)
   "Optional support modules loaded by `pharo-smalltalk-install'."
   :type '(set (const :tag "xref backend" xref)
               (const :tag "completion and eldoc" capf)
               (const :tag "test runner" test)
-              (const :tag "browser" browser))
+              (const :tag "browser" browser)
+              (const :tag "inspector" inspector))
   :group 'pharo-smalltalk)
 
 (defcustom pharo-smalltalk-global-command-key "C-c s"
@@ -132,6 +133,9 @@ Set to nil to leave the command map unbound globally."
 (autoload 'pharo-smalltalk-test-rerun "pharo-smalltalk-test" nil t)
 (autoload 'pharo-smalltalk-browse "pharo-smalltalk-browser" nil t)
 (autoload 'pharo-smalltalk-browse-class-in-browser "pharo-smalltalk-browser" nil t)
+(autoload 'pharo-smalltalk-inspect-expression "pharo-smalltalk-inspector" nil t)
+(autoload 'pharo-smalltalk-inspect-class-at-point-with-inspector
+  "pharo-smalltalk-inspector" nil t)
 
 (defvar pharo-smalltalk-command-map
   (let ((map (make-sparse-keymap)))
@@ -1819,6 +1823,8 @@ With prefix argument NEW-BUFFER, create a fresh workspace buffer."
 (define-key pharo-smalltalk-command-map (kbd "D") #'pharo-smalltalk-show-class-comment)
 (define-key pharo-smalltalk-command-map (kbd "x") #'pharo-smalltalk-export-package)
 (define-key pharo-smalltalk-command-map (kbd "v") #'pharo-smalltalk-show-screen)
+(define-key pharo-smalltalk-command-map (kbd "j") #'pharo-smalltalk-inspect-expression)
+(define-key pharo-smalltalk-command-map (kbd "J") #'pharo-smalltalk-inspect-class-at-point-with-inspector)
 (defvar pharo-smalltalk-test-map
   (make-sparse-keymap)
   "Prefix keymap for Pharo Smalltalk test commands.")
@@ -1838,7 +1844,8 @@ With prefix argument NEW-BUFFER, create a fresh workspace buffer."
       ('xref (require 'pharo-smalltalk-xref))
       ('capf (require 'pharo-smalltalk-capf))
       ('test (require 'pharo-smalltalk-test))
-      ('browser (require 'pharo-smalltalk-browser)))))
+      ('browser (require 'pharo-smalltalk-browser))
+      ('inspector (require 'pharo-smalltalk-inspector)))))
 
 (defun pharo-smalltalk--register-auto-modes ()
   "Register `pharo-smalltalk-mode' for `pharo-smalltalk-auto-mode-patterns'."

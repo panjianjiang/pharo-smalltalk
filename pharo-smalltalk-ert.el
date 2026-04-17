@@ -15,6 +15,7 @@
 (require 'pharo-smalltalk-capf)
 (require 'pharo-smalltalk-test)
 (require 'pharo-smalltalk-browser)
+(require 'pharo-smalltalk-inspector)
 
 (ert-deftest pharo-smalltalk-package-metadata-is-available ()
   (should (string-match-p "\\`[0-9]+\\.[0-9]+\\.[0-9]+\\'"
@@ -499,6 +500,61 @@ symbol's bounds, or when the text under the bounds has changed."
                  (setq invoked (cons program args)))))
       (pharo-smalltalk--display-screenshot "/tmp/fake.png")
       (should (equal invoked '("imgcat" "/tmp/fake.png"))))))
+
+(ert-deftest pharo-smalltalk-inspector-render-attaches-row-properties ()
+  "Rendering a tree attaches the row alist as a text property on each
+line so navigation can recover the ref for drill-down."
+  (with-temp-buffer
+    (pharo-smalltalk-inspector-mode)
+    (pharo-smalltalk-inspector--render
+     '((ref . 1) (class . "OrderedCollection")
+       (print . "an OrderedCollection(10 20)")
+       (identity_hash . 42) (size . 2)
+       (inst_vars
+        ((name . "firstIndex") (ref . 3) (class . "SmallInteger")
+         (print . "1") (has_children . :json-false)))
+       (indexable
+        ((name . "1") (ref . 5) (class . "SmallInteger")
+         (print . "10") (has_children . :json-false))
+        ((name . "2") (ref . 6) (class . "SmallInteger")
+         (print . "20") (has_children . :json-false)))))
+    (goto-char (point-min))
+    ;; Header line contains the root print string.
+    (should (search-forward "an OrderedCollection(10 20)" nil t))
+    ;; Jump to the firstIndex line by text search.
+    (goto-char (point-min))
+    (should (search-forward "firstIndex" nil t))
+    (let ((row (get-text-property (point) 'pharo-smalltalk-inspector-row)))
+      (should row)
+      (should (equal (alist-get 'ref row) 3))
+      (should (equal (alist-get 'class row) "SmallInteger")))
+    ;; The second indexable row carries its own ref.
+    (goto-char (point-min))
+    (should (search-forward "20  (SmallInteger)" nil t))
+    (let ((row (get-text-property (point) 'pharo-smalltalk-inspector-row)))
+      (should (equal (alist-get 'ref row) 6)))))
+
+(ert-deftest pharo-smalltalk-inspector-drill-pushes-stack ()
+  "Drilling from one view stashes the previous tree on the back stack."
+  (with-temp-buffer
+    (pharo-smalltalk-inspector-mode)
+    (let ((parent '((ref . 1) (class . "C") (print . "root")
+                    (inst_vars ((name . "f") (ref . 2) (class . "SmallInteger")
+                                (print . "1") (has_children . :json-false)))
+                    (indexable)))
+          (child '((ref . 2) (class . "SmallInteger") (print . "1")
+                   (inst_vars) (indexable))))
+      (cl-letf (((symbol-function 'pharo-smalltalk-inspector--fetch-ref)
+                 (lambda (ref) (should (equal ref 2)) child)))
+        (pharo-smalltalk-inspector--render parent)
+        (goto-char (point-min))
+        (search-forward "f = 1")
+        (pharo-smalltalk-inspector-drill)
+        (should (equal (alist-get 'ref pharo-smalltalk-inspector--current) 2))
+        (should (equal (length pharo-smalltalk-inspector--stack) 1))
+        (pharo-smalltalk-inspector-back)
+        (should (equal (alist-get 'ref pharo-smalltalk-inspector--current) 1))
+        (should (equal pharo-smalltalk-inspector--stack nil))))))
 
 (ert-deftest pharo-smalltalk-capf-eldoc-deliver-releases-empty ()
   "An empty async response must still call eldoc CALLBACK with nil

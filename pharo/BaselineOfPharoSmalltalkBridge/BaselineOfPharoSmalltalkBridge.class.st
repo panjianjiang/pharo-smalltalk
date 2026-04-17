@@ -16,8 +16,12 @@ BaselineOfPharoSmalltalkBridge >> baseline: spec [
 						'github://mumez/PharoSmalltalkInteropServer:main/src' ];
 			package: 'Sis-Bridge-Extras'
 				with: [ spec requires: #( 'PharoSmalltalkInteropServer' ) ];
+			package: 'Sis-Inspector'
+				with: [ spec requires: #( 'PharoSmalltalkInteropServer' ) ];
 			package: 'Sis-Bridge-Extras-Tests'
 				with: [ spec requires: #( 'Sis-Bridge-Extras' 'PharoSmalltalkInteropServer' ) ];
-			group: 'default' with: #( 'Sis-Bridge-Extras' );
-			group: 'tests' with: #( 'default' 'Sis-Bridge-Extras-Tests' ) ]
+			package: 'Sis-Inspector-Tests'
+				with: [ spec requires: #( 'Sis-Inspector' ) ];
+			group: 'default' with: #( 'Sis-Bridge-Extras' 'Sis-Inspector' );
+			group: 'tests' with: #( 'default' 'Sis-Bridge-Extras-Tests' 'Sis-Inspector-Tests' ) ]
 ]
